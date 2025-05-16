@@ -1,0 +1,396 @@
+# Taller 3 Preprocesamiento de datos:
+
+# install and load required packages
+Packages <- c("tidyverse", 
+              "ggplot2", 
+              "pacman", 
+              "dplyr",
+              "haven",
+              "boot",
+              "broom",
+              "lmtest", 
+              "fixest", 
+              "gridExtra", 
+              "writexl", 
+              "readxl",
+              "glmnet",
+              "VIM",
+              "caret", 
+              "MLmetrics",
+              "Metrics",
+              "pROC",
+              "rpart",
+              "rpart.plot",
+              "ranger",
+              "randomForest",
+              "parallel",
+              "doParallel",
+              "adabag",
+              "themis",
+              "rattle",
+              "stargazer",
+              "sf",
+              "tmaptools",
+              "osmdata",
+              "visdat",
+              "leaflet")
+
+invisible(lapply(Packages, function(pkg) {
+  if (!requireNamespace(pkg, quietly = TRUE)){ 
+    install.packages(pkg)}
+  library(pkg, character.only = TRUE)}))
+
+
+
+
+# Recolección de los datos:
+Train <- read.csv("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\train.csv")
+Test <- read.csv("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\test.csv")
+Template <- read.csv("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\submission_template.csv")
+
+
+##-----------------------------------------------------------------------------##
+
+# organización y Pre procesamiento:
+
+Train %>%
+  count(property_type)
+Test%>%
+  count(property_type)
+# Hay un desbalance en el test hacia apartamentos.
+
+# Redefinimos como no numericas las variables de años y meses:
+Train <- Train %>%
+  mutate(
+    year = as.factor(year),
+    month = as.factor(month))
+Test <- Test %>%
+  mutate(
+    year = as.factor(year),
+    month = as.factor(month))
+
+# Inspeccionamos los valores faltantes:
+Train<- Train %>% dplyr:: select(property_id, price, month, year,
+  surface_total, surface_covered, rooms, bedrooms, bathrooms,
+  property_type, lat, lon, title, description)
+
+Train <- Train %>%
+  mutate(title = na_if(title, "")) %>%
+  mutate( description= na_if(description, ""))
+
+vis_dat(Train)
+
+
+Test<- Test %>% dplyr:: select(property_id, price, month, year,
+                                 surface_total, surface_covered, rooms, bedrooms, bathrooms,
+                                 property_type, lat, lon, title, description)
+
+Test <- Test %>%
+  mutate(title = na_if(title, "")) %>%
+  mutate( description= na_if(description, ""))
+
+vis_dat(Test)
+
+# Existe un serio caso de valores faltantes en surface_covered & surface_total
+# Un menor numero para rooms & bathrooms.
+
+# Vamos a imputar valores para el número de habitaciones,cuartos, baños, área de 
+#superficie total y cubierta. Los dos primeros con la moda al tomar valores enteros
+# y los dos últimos con la mediana.
+
+Train %>%
+  count(rooms) %>% head() 
+Train %>%
+  count(bedrooms)
+Train %>%
+  count(bathrooms)
+
+Test %>%
+  count(rooms) %>% head() 
+Test %>%
+  count(bedrooms)
+Test %>%
+  count(bathrooms)
+
+# Calcular la mediana ELLOS EN EL CUADERNO LO HACEN ASI PERO REALMENTE SON DEMASIADOS MAS QUE EN ESE OTRO CASO
+# Para Train:
+mediana_surface_covered <- median(Train$surface_covered, na.rm = TRUE)
+mediana_surface_total<- median(Train$surface_total, na.rm = TRUE)
+Train <- Train %>%
+  mutate(rooms = replace_na(rooms, 3),
+         bedrooms = replace_na(bedrooms, 3),
+         bathrooms = replace_na(bathrooms, 2),
+         surface_covered = replace_na(surface_covered, mediana_surface_covered),
+         surface_total = replace_na(surface_total, mediana_surface_total),)
+# Para Test
+mediana_test_surface_covered <- median(Test$surface_covered, na.rm = TRUE)
+mediana_test_surface_total<- median(Test$surface_total, na.rm = TRUE)
+Test <- Test %>%
+  mutate(rooms = replace_na(rooms, 3),
+         bedrooms = replace_na(bedrooms, 3),
+         bathrooms = replace_na(bathrooms, 2),
+         surface_covered = replace_na(surface_covered, mediana_surface_covered),
+         surface_total = replace_na(surface_total, mediana_surface_total),)
+
+# Evaluamos anomalias de las variables numericas:
+stargazer(Train,type="text")
+# No hay precensia de incositencias dentro de la suerficie cubierta o total.
+stargazer(Test,type="text")
+# No hay precensia de incositencias dentro de la suerficie cubierta o total.
+
+# En la muestra de entrenamieto se calcula el precio por metro cuadrado, 
+# para inspeccionar inconsistencias:
+Train <- Train %>%
+  mutate(precio_por_mt2 = round(price / surface_total, 0))%>%
+  mutate(precio_por_mt2  =precio_por_mt2/1000000 )  ## precio x Mt2 en millones. 
+stargazer(Train["precio_por_mt2"],type="text")
+
+# Detectamos valores atipicos en el precio de nuestro trainig set:
+low <- round(mean(Train$precio_por_mt2) - 2*sd(Train$precio_por_mt2))
+up <- round(mean(Train$precio_por_mt2) + 2*sd(Train$precio_por_mt2))
+perc1 <- unname(round(quantile(Train$precio_por_mt2, probs = c(.01)),2))
+
+Graph_1 <- Train %>%
+  ggplot(aes(y = precio_por_mt2)) +
+  geom_boxplot(fill = "darkblue", alpha = 0.4) +
+  labs(
+    title = "Muestra con valores atipicos",
+    y = "Precio por metro cuadrado (millones)", x = "") +
+  theme_bw()
+Graph_2 <- Train %>%
+  filter(between(precio_por_mt2, perc1,  up)) %>% 
+  ggplot(aes(y = precio_por_mt2)) +
+  geom_boxplot(fill = "darkblue", alpha = 0.4) +
+  labs(
+    title = "Muestra sin los valores atipicos",
+    y = "Precio por metro cuadrado (millones)", x = "") +
+  theme_bw()
+grid.arrange(Graph_1, Graph_2, ncol = 2)
+
+# Es conguente procedemos a eliminar esos valores atipicos:
+Train <- Train %>% filter(between(precio_por_mt2, perc1, up))
+
+
+
+# Procedemos con inspeccion espacial de la muestra Train:
+
+# Eliminamos los valores faltantes de latitud o longitud
+Train <- Train %>%
+  filter(!is.na(lat) & !is.na(lon))
+
+# Observamos la primera visualización
+leaflet() %>%
+  addTiles() %>%
+  addCircles(lng = Train$lon, 
+             lat = Train$lat)
+# Nos aseguramos que solo tengamos observaciones dentro del limite politico administrativo de Bogota
+limes_Bog <- getbb("Bogota Colombia")
+limes_Bog
+
+Train <- Train %>%
+  filter(between(lon, limes_Bog[1, "min"], limes_Bog[1, "max"]) & 
+      between(lat, limes_Bog[2, "min"], limes_Bog[2, "max"]))
+
+# Eliminamos los inmuebles con área menor a 15
+Train <- Train %>% filter(surface_covered > 15)
+
+# Escalamos para que se pueda graficar
+Train <- Train %>% 
+  mutate(precio_por_mt2_sc = (precio_por_mt2 - min(precio_por_mt2, na.rm = TRUE)) / 
+           (max(precio_por_mt2, na.rm = TRUE) - min(precio_por_mt2, na.rm = TRUE)))
+
+# Asignamos colores según tipo de inmueble
+Train <- Train %>%
+  mutate(color = case_when(property_type == "Apartamento" ~ "#EE6363",
+                           property_type == "Casa" ~ "#7AC5CD",
+                           TRUE ~ "gray"))  # Por si hay más tipos
+
+# Creamos el popup en HTML
+Train <- Train %>%
+  mutate(popup_html = paste0("<b>Precio:</b> ", scales::dollar(price),
+                             "<br> <b>Área:</b> ", as.integer(surface_total), " mt2",
+                             "<br> <b>Tipo de inmueble:</b> ", property_type,
+                             "<br> <b>Alcobas:</b> ", as.integer(rooms),
+                             "<br> <b>Baños:</b> ", as.integer(bathrooms)))
+
+# Coordenadas centrales
+latitud_central <- mean(Train$lat, na.rm = TRUE)
+longitud_central <- mean(Train$lon, na.rm = TRUE)
+
+# Creamos el plot
+leaflet() %>%
+  addTiles() %>%
+  setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
+  addCircles(lng = Train$lon, 
+             lat = Train$lat, 
+             col = Train$color,
+             fillOpacity = 1,
+             opacity = 1,
+             radius = Train$precio_por_mt2_sc*10,
+             popup = html)
+
+
+
+setwd("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\")
+
+localidades <- st_read(dsn = "localidades_bog", layer = "Loca")
+
+names(localidades)
+plot(localidades["LocNombre"])  
+
+class(localidades)    # sf + data.frame 
+head(localidades)     # primeras filas (tabla de atributos)
+str(localidades)      # estructura (geometría + atributos)
+
+ggplot()+
+  geom_sf(data=localidades, color = "red")
+# Procedemos a filtrar solo las localidades urbanas:
+localidades_urbanas <- localidades %>%
+  filter(LocNombre %in% c("USAQUEN", "CHAPINERO", "SANTA FE", "SAN CRISTOBAL",
+                          "USME", "TUNJUELITO", "BOSA", "KENNEDY", "FONTIBON", 
+                          "ENGATIVA", "SUBA", "BARRIOS UNIDOS", "TEUSAQUILLO", 
+                          "LOS MARTIRES", "ANTONIO NARIÑO", "PUENTE ARANDA", 
+                          "CANDELARIA", "RAFAEL URIBE URIBE", "CIUDAD BOLIVAR"))
+plot(st_geometry(localidades_urbanas), main = "Localidades Urbanas de Bogotá")
+
+
+#Tranformacion de nuestros datos de viviendas en Train a sf utilizando MAGNA-SIRGAS Bogotá geodesico
+sf_Train<- st_as_sf(Train, coords = c("lon", "lat"),  crs = 4686)
+
+ggplot()+
+  geom_sf(data=localidades_urbanas, color = "red") + 
+  geom_sf(data=sf_Train,aes(color = precio_por_mt2) ,shape=15, size=0.3)+
+  theme_bw()
+
+# Unión espacial: agregar nombre de localidad a cada propiedad
+Train_localizado <- st_join(sf_Train, localidades_urbanas)
+
+
+# Reconozco mis key's de osmadata más relevantes para improtar de Openstreetmap:
+cat(available_features(), sep = "\n")
+print(available_tags("amenity"), n = Inf)
+print(available_tags("public_transport"), n = Inf)
+print(available_tags("highway"), n = Inf)
+print(available_tags("leisure"), n = Inf)
+print(available_tags("cycleway"), n = Inf)
+
+#Defino mi espacio:
+bogota<-opq(bbox = getbb("Bogotá Colombia"))
+bogota
+
+# Recupero mis features de interes para mi espacio:
+amenities <- bogota %>%
+  add_osm_feature(key = "amenity", value = c("university", "arts_centre", "bar", 
+                                             "atm", "cinema", "school", "hospital", 
+                                             "restaurant", "parking", "place_of_worship", 
+                                             "police")) %>%
+  osmdata_sf()
+
+public_transport <- bogota %>%
+  add_osm_feature(key = "public_transport", value = c("platform", "station", 
+                                                      "stop_area")) %>%
+  osmdata_sf()
+
+highway <- bogota %>%
+  add_osm_feature(key = "highway", value = c("living_street", "pedestrian", "primary",
+                                             "secondary", "secondary_link", 
+                                             "primary_link")) %>%
+  osmdata_sf()
+
+leisure <- bogota %>%
+  add_osm_feature(key = "leisure", value = c("fitness_centre", "garden", "dance",
+                                             "park", "playground")) %>%
+  osmdata_sf()
+
+cycleway <- bogota %>%
+  add_osm_feature(key = "cycleway", value = c("track", "lane")) %>%
+  osmdata_sf()
+
+
+
+#De las features del parque nos interesa su geomoetría y donde estan ubicados 
+amenities_geometria <- amenities$osm_polygons %>% 
+  dplyr::select(osm_id, name) 
+amenities_geometria <- st_as_sf(amenities$osm_polygons)
+
+public_transport_geometria <- public_transport$osm_polygons %>% 
+  dplyr::select(osm_id, name) 
+public_transport_geometria <- st_as_sf(public_transport$osm_polygons)
+
+highway_geometria <- highway$osm_polygons %>% 
+  dplyr::select(osm_id, name) 
+highway_geometria <- st_as_sf(highway$osm_polygons)
+
+leisure_geometria <- leisure$osm_polygons %>% 
+  dplyr::select(osm_id, name) 
+leisure_geometria <- st_as_sf(leisure$osm_polygons)
+
+cycleway_geometria <- cycleway$osm_polygons %>% 
+  dplyr::select(osm_id, name) 
+cycleway_geometria <- st_as_sf(cycleway$osm_polygons)
+
+
+# El area urbana de bogota es lo sufcientemente plana para guiarse fuelmente por los centorides:
+
+calculo_centroides <- function(data) {
+  # Calculamos los centroides
+  data_centroides <- st_centroid(data, byid = TRUE)
+  # Extraemos coordenadas X e Y y agregarlas como columnas
+  coords <- st_coordinates(data_centroides)
+  data_centroides <- data_centroides %>%
+    mutate(x = coords[, "X"],
+           y = coords[, "Y"])
+  return(data_centroides)
+}
+
+amenities_centroides <- calculo_centroides(amenities_geometria)
+public_transport_centroides <- calculo_centroides(public_transport_geometria)
+highway_centroides <- calculo_centroides(highway_geometria)
+cycleway_centroides <- calculo_centroides(cycleway_geometria)
+leisure_centroides <- calculo_centroides(leisure_geometria)
+# se tuvo un error por geometrias invalidas, inspeccionamos cuantas son:
+validas <- st_is_valid(leisure_geometria)
+table(validas)
+# solo son 2 se decide precindir de ellas y volvemos a correr la funcion calculo centroides:
+leisure_geometria <- leisure_geometria %>% filter(st_is_valid(.))
+
+
+
+
+
+#Creamos el mapa de Bogota con las ammenity seleccionadas:
+leaflet() %>%
+  addTiles() %>%
+  setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
+  addPolygons(data = amenities_geometria, col = "red",weight = 10,
+              opacity = 0.8, popup = amenities_geometria$name) %>%
+  addCircles(lng = amenities_centroides$x, 
+             lat = amenities_centroides$y, 
+             col = "darkblue", opacity = 0.5, radius = 1)
+#Creamos el mapa de Bogota con las public_transport seleccionadas:
+leaflet() %>%
+  addTiles() %>%
+  setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
+  addPolygons(data = public_transport_geometria, col = "red",weight = 10,
+              opacity = 0.8, popup = public_transport_geometria$name) %>%
+  addCircles(lng = public_transport_centroides$x, 
+             lat = public_transport_centroides$y, 
+             col = "darkblue", opacity = 0.5, radius = 1)
+#Creamos el mapa de Bogota con las highway seleccionadas:
+leaflet() %>%
+  addTiles() %>%
+  setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
+  addPolygons(data = highway_geometria, col = "red",weight = 10,
+              opacity = 0.8, popup = highway_geometria$name) %>%
+  addCircles(lng = highway_centroides$x, 
+             lat = highway_centroides$y, 
+             col = "darkblue", opacity = 0.5, radius = 1)
+#Creamos el mapa de Bogota con las leisure seleccionadas:
+leaflet() %>%
+  addTiles() %>%
+  setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
+  addPolygons(data = leisure_geometria, col = "red",weight = 10,
+              opacity = 0.8, popup = leisure_geometria$name) %>%
+  addCircles(lng = leisure_centroides$x, 
+             lat = leisure_centroides$y, 
+             col = "darkblue", opacity = 0.5, radius = 1)
