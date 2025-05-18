@@ -177,6 +177,8 @@ Train <- Train %>% filter(between(precio_por_mt2, perc1, up))
 # Eliminamos los valores faltantes de latitud o longitud
 Train <- Train %>%
   filter(!is.na(lat) & !is.na(lon))
+Test <- Test %>%
+  filter(!is.na(lat) & !is.na(lon))
 
 # Observamos la primera visualización
 leaflet() %>%
@@ -195,6 +197,10 @@ limes_Bog
 Train <- Train %>%
   filter(between(lon, limes_Bog[1, "min"], limes_Bog[1, "max"]) & 
       between(lat, limes_Bog[2, "min"], limes_Bog[2, "max"]))
+
+Test <- Test %>%
+  filter(between(lon, limes_Bog[1, "min"], limes_Bog[1, "max"]) & 
+           between(lat, limes_Bog[2, "min"], limes_Bog[2, "max"]))
 #Train <- Train %>%
 #  filter(!( between(lon, limes_chapinero[1, "min"], limes_chapinero[1, "max"]) &
 #       between(lat, limes_chapinero[2, "min"], limes_chapinero[2, "max"])))
@@ -202,7 +208,7 @@ Train <- Train %>%
 
 # Eliminamos los inmuebles con área menor a 15
 Train <- Train %>% filter(surface_covered > 15)
-
+Test <- Test %>% filter(surface_covered > 15)
 # Escalamos para que se pueda graficar
 Train <- Train %>% 
   mutate(precio_por_mt2_sc = (precio_por_mt2 - min(precio_por_mt2, na.rm = TRUE)) / 
@@ -386,8 +392,6 @@ calculo_centroides <- function(data) {
 amenities_centroides <- calculo_centroides(amenities_geometria)
 public_transport_centroides <- calculo_centroides(public_transport_geometria)
 building_centroides <- calculo_centroides(building_geometria)
-leisure_centroides <- calculo_centroides(leisure_geometria)
-shop_centroides <- calculo_centroides(shop_geometria)
 
 # ARREGLAMOS GEOMETRIAS INVALIDAS 
 # se tuvo un error por geometrias invalidas, inspeccionamos cuantas son:
@@ -561,28 +565,28 @@ calculo_distancias_Test_localizado_por_feature_ <- function(destino, nombre_colu
   Test_localizado <- Test_localizado %>% mutate(!!nombre_columna := dist_min)
   return(Test_localizado)
 }
-Test_localizado <- calculo_distancias_por_feature(university, "dist_universidad")
-Test_localizado <- calculo_distancias_por_feature(hospital, "dist_hospital")
-Test_localizado <- calculo_distancias_por_feature(restaurant, "dist_restaurante")
-Test_localizado <- calculo_distancias_por_feature(police, "dist_policia")
-Test_localizado <- calculo_distancias_por_feature(school, "dist_escuela")
-Test_localizado <- calculo_distancias_por_feature(place_of_worship, "dist_lugares_de_culto")
-Test_localizado <- calculo_distancias_por_feature(nightclub, "dist_discoteca")
-Test_localizado <- calculo_distancias_por_feature(parking, "dist_parqueadero")
-Test_localizado <- calculo_distancias_por_feature(theatre, "dist_teatro")
-Test_localizado <- calculo_distancias_por_feature(bar, "dist_bar")
-Test_localizado <- calculo_distancias_por_feature(platform, "dist_plataformas_del_transp_publico")
-Test_localizado <- calculo_distancias_por_feature(station, "dist_estaciones_del_transp_publico")
-Test_localizado <- calculo_distancias_por_feature(fitness_centre, "dist_gimnasios")
-Test_localizado <- calculo_distancias_por_feature(garden, "dist_jardines")
-Test_localizado <- calculo_distancias_por_feature(park, "dist_parque")
-Test_localizado <- calculo_distancias_por_feature(playground, "dist_zona_juegos_inft")
-Test_localizado <- calculo_distancias_por_feature(primary, "dist_via_primary")
-Test_localizado <- calculo_distancias_por_feature(secondary, "dist_via_secondary")
-Test_localizado <- calculo_distancias_por_feature(pedestrian, "dist_via_pedestrian")
-Test_localizado <- calculo_distancias_por_feature(cycleway, "dist_cycleway")
-Test_localizado <- calculo_distancias_por_feature(supermarket, "dist_supermarket")
-Test_localizado <- calculo_distancias_por_feature(mall, "dist_mall")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(university, "dist_universidad")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(hospital, "dist_hospital")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(restaurant, "dist_restaurante")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(police, "dist_policia")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(school, "dist_escuela")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(place_of_worship, "dist_lugares_de_culto")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(nightclub, "dist_discoteca")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(parking, "dist_parqueadero")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(theatre, "dist_teatro")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(bar, "dist_bar")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(platform, "dist_plataformas_del_transp_publico")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(station, "dist_estaciones_del_transp_publico")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(fitness_centre, "dist_gimnasios")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(garden, "dist_jardines")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(park, "dist_parque")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(playground, "dist_zona_juegos_inft")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(primary, "dist_via_primary")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(secondary, "dist_via_secondary")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(pedestrian, "dist_via_pedestrian")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(cycleway, "dist_cycleway")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(supermarket, "dist_supermarket")
+Test_localizado <- calculo_distancias_Test_localizado_por_feature_(mall, "dist_mall")
 
 
 # Porcedemos a crear variables a paritrde la informaicon de la vivienda:
@@ -619,16 +623,16 @@ names(Train_localizado) <- c(
   "bath_perb", "bath_perr", "ratio_cov", "bdrm_perr"
 )
 
+# Renombrar columnas de Test_localizado
 names(Test_localizado) <- c(
-  "prop_id", "price", "month", "year", "surf_total", "surf_cov", "rooms", "bdrms", "bathrm", "prop_typ",
-  "title", "descript", "prec_mt2", "prec_mt2sc", "color", "popuphtml", "loc_nomb", "loc_admin", "loc_area",
-  "loc_cod", "shp_leng", "shp_area", "obj_id", "cod_man", "estrato", "cod_zon", "cod_cri", "normatv",
-  "acto_admin", "num_act", "fecha_act", "escala_cp", "fecha_cap", "responsab", "shp_area2", "shp_len", 
-  "geometry", "dist_univ", "dist_hosp", "dist_rest", "dist_pol", "dist_esc", "dist_culto", "dist_disco", 
-  "dist_parq", "dist_teatr", "dist_bar", "dist_plat", "dist_estac", "dist_gym", "dist_jard", "dist_park", 
-  "dist_juego", "dist_vprim", "dist_vsec", "dist_vped", "dist_cycl", "dist_super", "dist_mall", 
-  "bath_perb", "bath_perr", "ratio_cov", "bdrm_perr"
-)
+  "prop_id", "price", "month", "year", "surf_total", "surf_cov", "rooms", "bdrms", "bathrm", "prop_typ", 
+  "title", "descript", "obj_id", "cod_man", "estrato", "cod_zon", "cod_cri", "normatv", "acto_admin", "num_act", 
+  "fecha_act", "escala_cp", "fecha_cap", "responsab", "shp_area", "shp_len", "geometry", "dist_univ", "dist_hosp", 
+  "dist_rest", "dist_pol", "dist_esc", "dist_culto", "dist_disco", "dist_parq", "dist_teatr", "dist_bar", 
+  "dist_plat", "dist_estac", "dist_gym", "dist_jard", "dist_park", "dist_juego", "dist_vprim", "dist_vsec", "dist_vped", 
+  "dist_cycl", "dist_super", "dist_mall", "bath_perb", "bath_perr", "ratio_cov", "bdrm_perr")
+
+
 
 
 
