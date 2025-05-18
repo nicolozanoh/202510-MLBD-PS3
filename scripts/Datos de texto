@@ -1,0 +1,458 @@
+#Variables de texto a datos
+
+install.packages(c("tidyverse", "tm", "text2vec", "stringr", "textclean", "readr"))
+
+# Si vas a hacer PCA o estandarización
+install.packages(c("FactoMineR", "factoextra"))
+
+# Para modelar (equivalente a sklearn y xgboost)
+install.packages(c("glmnet", "xgboost", "caret", "Metrics"))
+
+library(tidyverse)
+library(tm)
+library(text2vec)
+library(stringr)
+library(textclean)
+library(FactoMineR)
+library(factoextra)
+library(glmnet)
+library(xgboost)
+library(caret)
+library(Metrics)
+
+
+
+# Recolección de los datos:
+Train <- read.csv("C:\\Users\\claud\\OneDrive\\Documents\\OneDrive - Universidad de los andes\\Universidad Los andes\\Noveno semestre\\Big data\\taller 3\\Data\\train.csv")
+Test <- read.csv("C:\\Users\\claud\\OneDrive\\Documents\\OneDrive - Universidad de los andes\\Universidad Los andes\\Noveno semestre\\Big data\\taller 3\\Data\\test.csv")
+Template <- read.csv("C:\\Users\\claud\\OneDrive\\Documents\\OneDrive - Universidad de los andes\\Universidad Los andes\\Noveno semestre\\Big data\\taller 3\\Data\\submission_template.csv")
+
+
+# Agregar columna is_test
+Train$is_test <- 0
+Test$is_test <- 1
+
+# Unir en un solo dataframe
+data <- bind_rows(Train, Test)
+
+#Stopwords libreria necesaria
+
+library(tm)
+
+# 1. Obtener stopwords en español (versión base)
+stopwords_base <- stopwords("spanish")
+
+# 2. Definir stopwords adicionales (específicas al contexto de vivienda)
+stopwords_adicionales <- c(
+  "vendo", "venta", "vende", "etc", "carrera", "calle", "casa", "apto", 
+  "apartamento", "propiedad", "inmueble", "cuarto", "habitacion", 
+  "excelente", "ubicado", "area", "espectacular", "magnifico", "muy", 
+  "vivienda", "piso", "alcoba", "bano", "bao", "via", "mas", "consta", 
+  "bogota", "santa", "mts", "metro"
+)
+
+# 3. Unir ambas listas de stopwords en un solo vector único
+stopwords_total <- unique(c(stopwords_base, stopwords_adicionales))
+
+#Organizar y limpiar el texto
+install.packages("udpipe")
+library(udpipe)
+
+modelo_info <- udpipe_download_model(language = "spanish")
+
+modelo <- udpipe_load_model(file = modelo_info$file_model)
+
+#Quitamos acentos, mayúsculas.
+
+limpiar_texto <- function(texto, stopwords_total) {
+  if (is.na(texto) || texto == "") return("")
+  
+  texto <- tolower(texto)
+  texto <- textclean::replace_non_ascii(texto)
+  texto <- gsub("[[:punct:]]", " ", texto)
+  palabras <- unlist(strsplit(texto, "\\s+"))
+  palabras <- palabras[nchar(palabras) >= 3]
+  palabras <- palabras[!palabras %in% stopwords_total]
+  texto <- paste(palabras, collapse = " ")
+  
+  return(texto)
+}
+
+#Lematizamos el texto
+lematizar_texto <- function(texto, modelo) {
+  if (texto == "") return("")
+  anotado <- udpipe::udpipe_annotate(modelo, x = texto)
+  anotado <- as.data.frame(anotado)
+  lemas <- anotado$lemma[!is.na(anotado$lemma)]
+  lemas <- lemas[nchar(lemas) >= 3]
+  return(paste(lemas, collapse = " "))
+}
+
+#Función final
+
+procesar_texto <- function(texto, stopwords_total, modelo) {
+  texto <- limpiar_texto(texto, stopwords_total)        # Primer filtro
+  texto <- lematizar_texto(texto, modelo)               # Lematización
+  texto <- limpiar_texto(texto, stopwords_total)        # Segundo filtro
+  return(texto)
+}
+
+
+# 4. Aplicar a data$description creando cleaned_text
+# Esto mostrará progreso si tienes muchos datos
+install.packages("pbapply")
+library(pbapply)  # Para barra de progreso
+
+#Se demora aporx media hora corriendo y cambiando todo en la base completa 
+
+data$cleaned_text <- pbapply::pbsapply(data$description, procesar_texto, 
+                                       stopwords_total = stopwords_total, 
+                                       modelo = modelo)
+
+
+
+#Bag of words 
+
+library(text2vec)
+
+crear_bow <- function(data, text_column = "cleaned_text", min_freq = 0.01, ngram = c(1L, 2L)) {
+  
+  # 1. Tokenizar texto
+  it <- itoken(data[[text_column]], progressbar = TRUE)
+  
+  # 2. Crear vocabulario con n-gramas
+  vocab <- create_vocabulary(it, ngram = ngram)
+  
+  # 3. Filtrar por frecuencia mínima
+  vocab <- prune_vocabulary(vocab, term_count_min = min_freq * nrow(data))
+  
+  # 4. Vectorizador
+  vectorizer <- vocab_vectorizer(vocab)
+  
+  # 5. Crear matriz documento-término
+  dtm <- create_dtm(it, vectorizer)
+  
+  # 6. Convertir a DataFrame
+  bow_df <- as.data.frame(as.matrix(dtm))
+  colnames(bow_df) <- paste0("d_", colnames(bow_df))  # Prefijo
+  
+  # 7. Combinar con datos originales
+  data_final <- cbind(data, bow_df)
+  
+  return(data_final)
+}
+
+
+# Crear las versiones con distintos niveles de frecuencia mínima
+data_large <- crear_bow(data, min_freq = 0.01, ngram = c(1L, 2L))
+data_med   <- crear_bow(data, min_freq = 0.05, ngram = c(1L, 2L))
+data_light <- crear_bow(data, min_freq = 0.10, ngram = c(1L, 2L))
+
+cat("Variables BoW en data_large: ", ncol(data_large) - ncol(data), "\n")
+cat("Variables BoW en data_med:   ", ncol(data_med) - ncol(data), "\n")
+cat("Variables BoW en data_light: ", ncol(data_light) - ncol(data), "\n")
+
+#Largo 830
+#Mediano 164
+#Corto 79
+
+
+#Combinamos columnas que se repiten con diferente nombre
+
+#Creamos la función
+library(dplyr)
+
+combinar_dummies <- function(data, variable_pairs) {
+  data_copy <- data
+  
+  for (pair in variable_pairs) {
+    var1 <- pair[1]
+    var2 <- pair[2]
+    
+    # Verifica si ambas columnas existen
+    if (var1 %in% names(data_copy) && var2 %in% names(data_copy)) {
+      base <- gsub("d_", "", var1)
+      new_col <- paste0("d_", base)
+      
+      data_copy[[new_col]] <- pmax(data_copy[[var1]], data_copy[[var2]], na.rm = TRUE)
+      
+      data_copy <- data_copy %>% select(-all_of(c(var1, var2)))
+    } else {
+      message(paste("Se omitió el par:", var1, "+", var2, "→ no encontrado."))
+    }
+  }
+  
+  return(data_copy)
+}
+
+#Se define la lista de nombres pares
+
+variable_pairs <- list(
+  
+  c("d_iluminacion", "d_iluminado"),
+  c("d_saln", "d_salon")
+)
+
+
+data_med_clean <- combinar_dummies(data_med, variable_pairs)
+
+#Empezamos ahora con PCA ya que quedamos con 178 variables en el data_med
+
+library(dplyr)
+library(caret)   # para preprocesamiento
+library(stats)   # prcomp ya viene con R base
+library(ggplot2)
+
+columnas_excluir <- c("property_id", "price", "city", "month", "year", 
+                      "property_type", "operation_type", "lat", "lon", "title", 
+                      "description", "cleaned_text", "is_test")
+
+perform_pca <- function(data, exclude_columns, explained_variance = 0.95) {
+  # 1. Separar y filtrar solo numéricas
+  X_pca <- data %>%
+    select(-all_of(exclude_columns)) %>%
+    select(where(is.numeric)) %>%
+    mutate(across(everything(), ~ ifelse(is.na(.), median(., na.rm = TRUE), .)))
+  
+  X_remaining <- data %>% select(all_of(exclude_columns))
+  
+  # 2. Estandarizar
+  pre_proc <- caret::preProcess(X_pca, method = c("center", "scale"))
+  X_scaled <- predict(pre_proc, X_pca)
+  
+  # 3. PCA
+  pca_result <- prcomp(X_scaled, center = FALSE, scale. = FALSE)
+  
+  # 4. Varianza acumulada
+  var_cum <- cumsum(pca_result$sdev^2) / sum(pca_result$sdev^2)
+  n_componentes <- which(var_cum >= explained_variance)[1]
+  
+  # 5. Extraer componentes
+  pcs <- as.data.frame(pca_result$x[, 1:n_componentes])
+  colnames(pcs) <- paste0("PC", 1:n_componentes)
+  
+  # 6. Combinar
+  resultado <- cbind(X_remaining, pcs)
+  
+  return(list(data = resultado, pca = pca_result, varianza = var_cum))
+}
+
+
+
+resultado_pca <- perform_pca(data_med_clean, columnas_excluir, explained_variance = 0.95)
+data_med_pca <- resultado_pca$data
+modelo_pca <- resultado_pca$pca
+var_cum <- resultado_pca$varianza
+
+length(resultado_pca$varianza[resultado_pca$varianza < 0.95]) + 1
+
+#130 PC's 
+
+# Crear data frame para graficar y analizar los componenetes principales
+# Determinar el número de componentes necesarios para 95%
+limite_componentes <- which(var_cum >= 0.95)[1]
+
+# Crear data frame filtrado
+df_varianza <- data.frame(
+  Componente = 1:limite_componentes,
+  VarianzaAcumulada = var_cum[1:limite_componentes]
+)
+
+# Graficar hasta 95%
+ggplot(df_varianza, aes(x = Componente, y = VarianzaAcumulada)) +
+  geom_line(color = "darkred", size = 1, linetype = "dashed") +
+  geom_point(color = "darkred", size = 1.5) +
+  geom_hline(yintercept = 0.95, color = "blue", size = 1) +
+  geom_vline(xintercept = limite_componentes, color = "lightblue", size = 1) +
+  labs(
+    title = paste("Scree Plot hasta 95% de Varianza (", limite_componentes, " PCs)", sep = ""),
+    x = "Número de Componentes",
+    y = "Varianza Explicada Acumulada"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+
+#Vamos a hacer una selección de componentes (Elbow Plot PCA)
+
+modelo_pca <- resultado_pca$pca
+
+# 1. Varianza individual por componente
+explained_variance <- (modelo_pca$sdev^2) / sum(modelo_pca$sdev^2)
+
+# 2. DataFrame para graficar
+df_varianza <- data.frame(
+  Componente = 1:length(explained_variance),
+  Varianza = explained_variance
+)
+
+# 3. Graficar "Elbow Plot"
+library(ggplot2)
+
+ggplot(df_varianza, aes(x = Componente, y = Varianza)) +
+  geom_line(color = "blue", linetype = "dashed") +
+  geom_point(color = "blue") +
+  geom_vline(xintercept = length(colnames(data_med_pca)) - length(columnas_excluir), 
+             color = "green", linetype = "dotted") +
+  labs(title = "Elbow Plot para PCA",
+       x = "Número de Componentes",
+       y = "Varianza Explicada") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14))
+
+#De la prueba podemos ver que los componentes que realmente aportan información van como hasta el 30, por lo que mantener los 132 componentes es innecesario
+
+
+
+pcs_30 <- as.data.frame(modelo_pca$x[, 1:30])
+colnames(pcs_30) <- paste0("PC", 1:30)
+
+data_pca_30 <- cbind(data_med_clean[, columnas_excluir], pcs_30)
+
+str(data_pca_30)
+summary(data_pca_30$PC1)
+
+
+
+
+#Variables numéricas
+
+numeros_palabras <- c(
+  "un" = 1, "uno" = 1, "primer" = 1, "primero" = 1, "1er" = 1,
+  "dos" = 2, "segundo" = 2, "2do" = 2,
+  "tres" = 3, "tercero" = 3, "3ro" = 3,
+  "cuatro" = 4, "cuarto" = 4, "4to" = 4,
+  "cinco" = 5, "quinto" = 5, "5to" = 5,
+  "seis" = 6, "sexto" = 6, "6to" = 6,
+  "siete" = 7, "septimo" = 7, "7mo" = 7,
+  "ocho" = 8, "octavo" = 8, "8vo" = 8,
+  "nueve" = 9, "noveno" = 9, "9no" = 9,
+  "diez" = 10, "decimo" = 10, "10mo" = 10,
+  "once" = 11, "undecimo" = 11, "11mo" = 11,
+  "doce" = 12, "duodecimo" = 12, "12mo" = 12,
+  "trece" = 13, "13mo" = 13,
+  "catorce" = 14, "14mo" = 14,
+  "quince" = 15, "15mo" = 15,
+  "dieciseis" = 16, "16mo" = 16,
+  "diecisiete" = 17, "17mo" = 17,
+  "dieciocho" = 18, "18mo" = 18,
+  "diecinueve" = 19, "19mo" = 19,
+  "veinte" = 20, "20mo" = 20,
+  "veintiuno" = 21, "21mo" = 21,
+  "veintidos" = 22, "22mo" = 22,
+  "veintitres" = 23, "23mo" = 23,
+  "veinticuatro" = 24, "24mo" = 24,
+  "veinticinco" = 25, "25mo" = 25,
+  "veintiseis" = 26, "26mo" = 26,
+  "veintisiete" = 27, "27mo" = 27,
+  "veintiocho" = 28, "28mo" = 28,
+  "veintinueve" = 29, "29mo" = 29,
+  "treinta" = 30, "30mo" = 30
+)
+
+
+palabras_habitaciones <- c("habitacion", "cuarto", "alcoba", "dormitorio")
+palabras_banos <- c("baño", "aseo", "bano", "bao")
+palabras_pisos <- c("piso", "nivel", "planta")
+palabras_area <- c("metro", "m2", "mt2")  # ESTA es la que te falta
+palabras_parqueadero <- c("garaje", "parqueadero", "parqueo", "estacionamiento")
+palabras_ano <- c("ano", "años", "anios", "antiguedad")
+
+# -------------------------------
+# Conversión de texto a números
+# -------------------------------
+convertir_numeros <- function(texto) {
+  for (palabra in names(numeros_palabras)) {
+    texto <- gsub(paste0("\\b", palabra, "\\b"), numeros_palabras[palabra], texto)
+  }
+  return(texto)
+}
+
+# -------------------------------
+# Buscar número asociado a palabra clave
+# -------------------------------
+extraer_variable <- function(texto, palabras_clave) {
+  patron1 <- paste0("(\\d+)\\s*(?:", paste(palabras_clave, collapse = "|"), ")")
+  patron2 <- paste0("(?:", paste(palabras_clave, collapse = "|"), ")\\s*(\\d+)")
+  
+  match1 <- regexpr(patron1, texto, perl = TRUE)
+  match2 <- regexpr(patron2, texto, perl = TRUE)
+  
+  if (match1[1] != -1) {
+    m <- regmatches(texto, match1)
+    return(as.numeric(gsub("(\\d+).*", "\\1", m)))
+  } else if (match2[1] != -1) {
+    m <- regmatches(texto, match2)
+    return(as.numeric(gsub(".*?(\\d+)", "\\1", m)))
+  } else {
+    return(NA)
+  }
+}
+
+# -------------------------------
+# Función principal para extraer variables numéricas
+# -------------------------------
+procesar_descripcion <- function(texto) {
+  if (is.na(texto)) return(rep(NA, 6))
+  
+  texto <- tolower(texto)
+  texto <- gsub("[áÁ]", "a", texto)
+  texto <- gsub("[éÉ]", "e", texto)
+  texto <- gsub("[íÍ]", "i", texto)
+  texto <- gsub("[óÓ]", "o", texto)
+  texto <- gsub("[úÚ]", "u", texto)
+  texto <- gsub("ñ", "n", texto)
+  
+  texto <- convertir_numeros(texto)
+  
+  num_pisos <- extraer_variable(texto, palabras_pisos)
+  num_habitaciones <- extraer_variable(texto, palabras_habitaciones)
+  num_banos <- extraer_variable(texto, palabras_banos)
+  area_m2 <- extraer_variable(texto, palabras_area)
+  num_parqueaderos <- extraer_variable(texto, palabras_parqueadero)
+  ano_construccion <- extraer_variable(texto, palabras_ano)
+  
+  return(as.numeric(c(num_pisos, num_habitaciones, num_banos, area_m2, num_parqueaderos, ano_construccion)))
+}
+
+# -------------------------------
+# Aplicar función a cleaned_text
+# -------------------------------
+vars_extraidas <- t(sapply(data_med_clean$cleaned_text, procesar_descripcion))
+colnames(vars_extraidas) <- c("num_pisos", "num_habitaciones", "num_banos", "area_m2", "num_parqueaderos", "ano_construccion")
+
+# -------------------------------
+# Agregar al dataset
+# -------------------------------
+data_med_clean <- cbind(data_med_clean, vars_extraidas)
+
+
+#Se verifica cantidad de NA
+colSums(is.na(data_med_clean[, c("num_pisos", "num_habitaciones", "num_banos", "area_m2", "num_parqueaderos", "ano_construccion")]))
+
+#Se van a unificar las bases de PCA y la de data_med_clean
+
+# Verifica que ambas tienen la columna clave
+"property_id" %in% names(data_med_pca)
+"property_id" %in% names(data_med_clean)
+
+
+vars_texto <- data_med_clean[, c("property_id", "num_pisos", "num_habitaciones",
+                                 "num_banos", "area_m2", "num_parqueaderos", "ano_construccion")]
+
+library(dplyr)
+
+data_texto_completa <- data_pca_30 %>%
+  left_join(vars_texto, by = "property_id")
+
+#Queda una base de datos de 49 variables en total
+
+
+#Separamos las bases de datos en Train y en Test
+
+# Base de entrenamiento
+data_texto_train <- data_texto_completa %>% filter(is_test == 0)
+
+# Base de prueba
+data_texto_test <- data_texto_completa %>% filter(is_test == 1)
+
