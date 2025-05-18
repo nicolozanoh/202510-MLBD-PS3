@@ -259,7 +259,7 @@ head(Manzanas)     # primeras filas (tabla de atributos)
 str(Manzanas)      # estructura (geometría + atributos)
 
 
-
+# DEBERIAMOS DE PENSAR EN ELIMINAR SUBA Y CIUDAD BOLIVAR MUY POCAS OBSERVACIONES EL MAPA SE DISTORCIONA MUCHO
 # Filtrar localidades urbanas
 localidades_urbanas <- localidades %>%
   filter(LocNombre %in% c("USAQUEN", "CHAPINERO", "SANTA FE", "SAN CRISTOBAL",
@@ -341,11 +341,11 @@ leisure <- bogota %>%
   osmdata_sf()
 
 building<- bogota %>%
-  add_osm_feature(key = "building ", value = c("supermarket")) %>%
+  add_osm_feature(key = "building", value = c("supermarket")) %>%
   osmdata_sf()
 
 shop  <- bogota %>%
-  add_osm_feature(key = "shop ", value = c("mall")) %>%
+  add_osm_feature(key = "shop", value = c("mall")) %>%
   osmdata_sf()
 
 
@@ -366,7 +366,7 @@ building_geometria <- st_as_sf(building$osm_polygons) %>%
   dplyr::select(osm_id, name, building)
 
 shop_geometria <- st_as_sf(shop$osm_polygons) %>%
-  dplyr::select(osm_id, name, mall)
+  dplyr::select(osm_id, name, shop)
 
 
 # El area urbana de bogota es lo sufcientemente plana para guiarse fielmente por los centorides:
@@ -385,16 +385,24 @@ calculo_centroides <- function(data) {
 
 amenities_centroides <- calculo_centroides(amenities_geometria)
 public_transport_centroides <- calculo_centroides(public_transport_geometria)
+building_centroides <- calculo_centroides(building_geometria)
 leisure_centroides <- calculo_centroides(leisure_geometria)
 shop_centroides <- calculo_centroides(shop_geometria)
-building_centroides <- calculo_centroides(building_geometria)
 
+# ARREGLAMOS GEOMETRIAS INVALIDAS 
 # se tuvo un error por geometrias invalidas, inspeccionamos cuantas son:
 validas <- st_is_valid(leisure_geometria)
 table(validas)
 # solo son 2 se decide precindir de ellas y volvemos a correr la funcion calculo centroides:
 leisure_geometria <- leisure_geometria %>% filter(st_is_valid(.))
 leisure_centroides <- calculo_centroides(leisure_geometria)
+
+# se tuvo un error por geometrias invalidas, inspeccionamos cuantas son:
+validas <- st_is_valid(shop_geometria)
+table(validas)
+# solo son 1 se decide precindir de ellas y volvemos a correr la funcion calculo centroides:
+shop_geometria <- shop_geometria %>% filter(st_is_valid(.))
+shop_centroides <- calculo_centroides(shop_geometria)
 
 # Pasamos las geometrias de los centroides y lineas a Magnas sirgas proyectado:
 amenities_centroides <- st_transform(amenities_centroides, crs = 3116)
@@ -434,11 +442,11 @@ lista_highway <- dividir_por_categoria(highway_geometria)
 names(lista_highway)  
 list2env(lista_highway, envir = .GlobalEnv)
 
-lista_shop <- dividir_por_categoria(shop_geometria)
+lista_shop <- dividir_por_categoria(shop_centroides)
 names(lista_shop)  
 list2env(lista_shop, envir = .GlobalEnv)
 
-building <- dividir_por_categoria(building_geometria)
+building <- dividir_por_categoria(building_centroides)
 names(building)  
 list2env(building, envir = .GlobalEnv)
 
@@ -483,33 +491,29 @@ leaflet() %>%
 ggplot() +
   geom_sf(data = localidades_urbanas,color = "black")+
   geom_sf(data = highway_geometria, color = "blue", size = 0.4) +
-  labs(title = "Infraestructura de Calles significativas") +
+  labs(title = "Infraestructura de Calles y ciclorutas significativas") +
   theme_minimal()
 
-ggplot() +
-  geom_sf(data = localidades_urbanas,color = "black")+
-  geom_sf(data = cycleway, color = "red", size = 0.3, linetype = "dashed") +
-  labs(title = "Infraestructura de ciclorutas")+
-  theme_minimal()
+
 
 #Creamos el mapa de Bogota con los mall:
 leaflet() %>%
   addTiles() %>%
   setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
-  addPolygons(data = mall_geometria, col = "red",weight = 10,
-              opacity = 0.8, popup = mall_geometria$name) %>%
-  addCircles(lng = mall_centroides$x, 
-             lat = mall_centroides$y, 
+  addPolygons(data = shop_geometria, col = "red",weight = 10,
+              opacity = 0.8, popup = shop_geometria$name) %>%
+  addCircles(lng = shop_centroides$x, 
+             lat = shop_centroides$y, 
              col = "darkblue", opacity = 0.5, radius = 1)
 
-#Creamos el mapa de Bogota con los supermarkets:
+#Creamos el mapa de Bogota con los supermarkets: NO TIENE MUCHOS NO SE SI ELIMINAR???
 leaflet() %>%
   addTiles() %>%
   setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
-  addPolygons(data = supermarket_geometria, col = "red",weight = 10,
-              opacity = 0.8, popup = supermarket_geometria$name) %>%
-  addCircles(lng = supermarket_centroides$x, 
-             lat = supermarket_centroides$y, 
+  addPolygons(data = building_geometria, col = "red",weight = 10,
+              opacity = 0.8, popup = building_geometria$name) %>%
+  addCircles(lng = building_centroides$x, 
+             lat = building_centroides$y, 
              col = "darkblue", opacity = 0.5, radius = 1)
 
 # Calculamos distancias entre viviendas y features:
@@ -541,11 +545,12 @@ Train_localizado <- calculo_distancias_por_feature(fitness_centre, "dist_gimnasi
 Train_localizado <- calculo_distancias_por_feature(garden, "dist_jardines")
 Train_localizado <- calculo_distancias_por_feature(park, "dist_parque")
 Train_localizado <- calculo_distancias_por_feature(playground, "dist_zona_juegos_inft")
-Train_localizado <- calculo_distancias_por_feature(playground, "dist_via_primary")
-Train_localizado <- calculo_distancias_por_feature(playground, "dist_via_secondary")
-Train_localizado <- calculo_distancias_por_feature(playground, "dist_via_pedestrian")
-Train_localizado <- calculo_distancias_por_feature(playground, "dist_cycleway")
-Train_localizado <- calculo_distancias_por_feature(playground, "mall")
+Train_localizado <- calculo_distancias_por_feature(primary, "dist_via_primary")
+Train_localizado <- calculo_distancias_por_feature(secondary, "dist_via_secondary")
+Train_localizado <- calculo_distancias_por_feature(pedestrian, "dist_via_pedestrian")
+Train_localizado <- calculo_distancias_por_feature(cycleway, "dist_cycleway")
+Train_localizado <- calculo_distancias_por_feature(supermarket, "dist_supermarket")
+Train_localizado <- calculo_distancias_por_feature(mall, "dist_mall")
 
 
 # LO MISMO PARA TEST
@@ -572,11 +577,12 @@ Test_localizado <- calculo_distancias_por_feature(fitness_centre, "dist_gimnasio
 Test_localizado <- calculo_distancias_por_feature(garden, "dist_jardines")
 Test_localizado <- calculo_distancias_por_feature(park, "dist_parque")
 Test_localizado <- calculo_distancias_por_feature(playground, "dist_zona_juegos_inft")
-Test_localizado <- calculo_distancias_por_feature(playground, "dist_via_primary")
-Test_localizado <- calculo_distancias_por_feature(playground, "dist_via_secondary")
-Test_localizado <- calculo_distancias_por_feature(playground, "dist_via_pedestrian")
-Train_localizado <- calculo_distancias_por_feature(playground, "dist_cycleway")
-Test_localizado <- calculo_distancias_por_feature(playground, "mall")
+Test_localizado <- calculo_distancias_por_feature(primary, "dist_via_primary")
+Test_localizado <- calculo_distancias_por_feature(secondary, "dist_via_secondary")
+Test_localizado <- calculo_distancias_por_feature(pedestrian, "dist_via_pedestrian")
+Test_localizado <- calculo_distancias_por_feature(cycleway, "dist_cycleway")
+Test_localizado <- calculo_distancias_por_feature(supermarket, "dist_supermarket")
+Test_localizado <- calculo_distancias_por_feature(mall, "dist_mall")
 
 
 # Porcedemos a crear variables a paritrde la informaicon de la vivienda:
@@ -593,3 +599,45 @@ crear_variables_base_vivienda <- function(data){
 
 Train_localizado <- crear_variables_base_vivienda(Train_localizado)
 Test_localizado <- crear_variables_base_vivienda(Test_localizado)
+
+
+names(Train_localizado
+      )
+
+
+names(Test_localizado)
+
+
+names(Train_localizado) <- c(
+  "prop_id", "price", "month", "year", "surf_total", "surf_cov", "rooms", "bdrms", "bathrm", "prop_typ",
+  "title", "descript", "prec_mt2", "prec_mt2sc", "color", "popuphtml", "loc_nomb", "loc_admin", "loc_area",
+  "loc_cod", "shp_leng", "shp_area", "obj_id", "cod_man", "estrato", "cod_zon", "cod_cri", "normatv",
+  "acto_admin", "num_act", "fecha_act", "escala_cp", "fecha_cap", "responsab", "shp_area2", "shp_len", 
+  "geometry", "dist_univ", "dist_hosp", "dist_rest", "dist_pol", "dist_esc", "dist_culto", "dist_disco", 
+  "dist_parq", "dist_teatr", "dist_bar", "dist_plat", "dist_estac", "dist_gym", "dist_jard", "dist_park", 
+  "dist_juego", "dist_vprim", "dist_vsec", "dist_vped", "dist_cycl", "dist_super", "dist_mall", 
+  "bath_perb", "bath_perr", "ratio_cov", "bdrm_perr"
+)
+
+names(Test_localizado) <- c(
+  "prop_id", "price", "month", "year", "surf_total", "surf_cov", "rooms", "bdrms", "bathrm", "prop_typ",
+  "title", "descript", "prec_mt2", "prec_mt2sc", "color", "popuphtml", "loc_nomb", "loc_admin", "loc_area",
+  "loc_cod", "shp_leng", "shp_area", "obj_id", "cod_man", "estrato", "cod_zon", "cod_cri", "normatv",
+  "acto_admin", "num_act", "fecha_act", "escala_cp", "fecha_cap", "responsab", "shp_area2", "shp_len", 
+  "geometry", "dist_univ", "dist_hosp", "dist_rest", "dist_pol", "dist_esc", "dist_culto", "dist_disco", 
+  "dist_parq", "dist_teatr", "dist_bar", "dist_plat", "dist_estac", "dist_gym", "dist_jard", "dist_park", 
+  "dist_juego", "dist_vprim", "dist_vsec", "dist_vped", "dist_cycl", "dist_super", "dist_mall", 
+  "bath_perb", "bath_perr", "ratio_cov", "bdrm_perr"
+)
+
+
+
+
+
+
+# Guardamos en un archivo shapefield:
+# para el trianing set:
+st_write(Train_localizado, "C:\\Users\\samue\\OneDrive\\Escritorio\\Train_localizado.shp")
+
+#para el testing set:
+st_write(Test_localizado, "C:\\Users\\samue\\OneDrive\\Escritorio\\Test_localizado.shp")
