@@ -34,11 +34,6 @@ invisible(lapply(Packages, function(pkg) {
 # llamamos nuestras bases de datos:
 setwd("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\")
 
-localidades_urbanas <- st_read(dsn = "Bases de datos propias\\localidades urbanas", layer = "localidades_urbanas")
-names(localidades_urbanas) 
-class(localidades_urbanas)    # sf + data.frame 
-head(localidades_urbanas)     # primeras filas (tabla de atributos)
-str(localidades_urbanas)      # estructura (geometría + atributos)
 
 Train_localizado<- st_read(dsn = "Bases de datos propias\\Train", layer = "Train_localizado")
 names(Train_localizado)  
