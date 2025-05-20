@@ -1,0 +1,154 @@
+# Validacion cruzada espacial y modelos:
+Packages <- c("tidyverse", 
+              "ggplot2", 
+              "pacman", 
+              "dplyr",
+              "haven",
+              "boot",
+              "broom",
+              "lmtest", 
+              "fixest", 
+              "gridExtra", 
+              "writexl", 
+              "readxl",
+              "stargazer",
+              "sf",
+              "tmaptools",
+              "osmdata",
+              "visdat",
+              "leaflet",
+              "stringi", # Manipular cadenas de texto
+              "rio", # Importar datos fácilmente
+              "sf", # Leer/escribir/manipular datos espaciales
+              "tidymodels", # entrenamiento de modelos
+              "blockCV", # validacion cruzada espacial
+              "spatialsample") # Muestreo espacial para modelos de aprendizaje automático)
+
+invisible(lapply(Packages, function(pkg) {
+  if (!requireNamespace(pkg, quietly = TRUE)){ 
+    install.packages(pkg)}
+  library(pkg, character.only = TRUE)}))
+
+
+# llamamos nuestras bases de datos:
+setwd("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\")
+
+localidades_urbanas <- st_read(dsn = "Bases de datos propias\\localidades urbanas", layer = "localidades_urbanas")
+names(localidades_urbanas) 
+class(localidades_urbanas)    # sf + data.frame 
+head(localidades_urbanas)     # primeras filas (tabla de atributos)
+str(localidades_urbanas)      # estructura (geometría + atributos)
+
+Train_localizado<- st_read(dsn = "Bases de datos propias\\Train", layer = "Train_localizado")
+names(Train_localizado)  
+class(Train_localizado)    # sf + data.frame 
+head(Train_localizado)     # primeras filas (tabla de atributos)
+str(Train_localizado)      # estructura (geometría + atributos)
+
+Test_localizado<- st_read(dsn = "Bases de datos propias\\Test", layer = "Test_localizado")
+names(Test_localizado)  
+class(Test_localizado)    # sf + data.frame 
+head(Test_localizado)     # primeras filas (tabla de atributos)
+str(Test_localizado)      # estructura (geometría + atributos)
+
+
+
+# Hacemos partision de chapinero 
+Train_localizado <- Train_localizado %>% subset( loc_nmb != 'CHAPINERO' | is.na(loc_nmb)==TRUE )
+# Eliminar filas con NA en esas columnas
+vars <- c("title", "descrpt", "clnd_tx")
+Train_localizado <- Train_localizado %>%
+  mutate(across(all_of(vars), as.character)) %>%
+  filter(if_all(all_of(vars), ~ !is.na(.)))
+Test_localizado <- Test_localizado %>%
+  mutate(across(all_of(vars), as.character)) %>%
+  filter(if_all(all_of(vars), ~ !is.na(.)))
+
+
+
+########## Imputacion de variables clave #################################################
+
+# Función para calcular la moda
+moda <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+########## Imputacion estrato #################################################
+# Separar los puntos con y sin estrato
+con_estrato <- Train_localizado %>% filter(!is.na(estrato))
+sin_estrato <- Train_localizado %>% filter(is.na(estrato))
+
+con_estrato_TEST <- Test_localizado %>% filter(!is.na(estrato))
+sin_estrato_TEST <- Test_localizado %>% filter(is.na(estrato))
+# Extraer coordenadas en formato matriz para kNN
+coords_con <- st_coordinates(st_centroid(con_estrato))
+coords_sin <- st_coordinates(st_centroid(sin_estrato))
+
+coords_con_TEST <- st_coordinates(st_centroid(con_estrato_TEST))
+coords_sin_TEST <- st_coordinates(st_centroid(sin_estrato_TEST))
+
+# Buscar los k vecinos más cercanos (aquí usamos k = 5)
+knn_result_TRAIN <- get.knnx(coords_con, coords_sin, k = 5)
+knn_result_TEST <- get.knnx(coords_con_TEST, coords_sin_TEST, k = 5)
+
+# Imputar estrato usando moda de los vecinos
+estrato_imputado_TRAIN <- apply(knn_result_TRAIN$nn.index, 1, function(indices) {
+  vecinos <- con_estrato$estrato[indices]
+  moda(vecinos)
+})
+
+estrato_imputado_TEST <- apply(knn_result_TEST$nn.index, 1, function(indices) {
+  vecinos <- con_estrato_TEST$estrato[indices]
+  moda(vecinos)
+})
+# Asignar los estratos imputados
+sin_estrato$estrato <- estrato_imputado_TRAIN
+sin_estrato_TEST$estrato <- estrato_imputado_TEST
+# Combinar todo
+Train_localizado <- bind_rows(con_estrato, sin_estrato)
+Test_localizado <- bind_rows(con_estrato_TEST, sin_estrato_TEST)
+########## Imputacion Numero de parqueaderos #################################################
+# Separar los puntos con y sin estrato
+con_nm_prqd  <- Train_localizado %>% filter(!is.na(nm_prqd ))
+sin_nm_prqd  <- Train_localizado %>% filter(is.na(nm_prqd ))
+
+con_nm_prqd_TEST  <- Test_localizado %>% filter(!is.na(nm_prqd ))
+sin_nm_prqd_TEST  <- Test_localizado %>% filter(is.na(nm_prqd ))
+# Extraer coordenadas en formato matriz para kNN
+coords_con_nm_prqd <- st_coordinates(st_centroid(con_nm_prqd))
+coords_sin_nm_prqd <- st_coordinates(st_centroid(sin_nm_prqd))
+
+coords_con_nm_prqd_TEST <- st_coordinates(st_centroid(con_nm_prqd_TEST))
+coords_sin_nm_prqd_TEST <- st_coordinates(st_centroid(sin_nm_prqd_TEST))
+# Buscar los k vecinos más cercanos (aquí usamos k = 5)
+knn_result <- get.knnx(coords_con_nm_prqd, coords_sin_nm_prqd, k = 5)
+knn_result_Test <- get.knnx(coords_con_nm_prqd_TEST, coords_sin_nm_prqd_TEST, k = 5)
+
+# Imputar estrato usando moda de los vecinos
+nm_prqd_imputado <- apply(knn_result$nn.index, 1, function(indices) {
+  vecinos <- con_nm_prqd$nm_prqd [indices]
+  moda(vecinos)
+})
+
+nm_prqd_imputado_Test <- apply(knn_result_Test$nn.index, 1, function(indices) {
+  vecinos <- con_nm_prqd_TEST$nm_prqd [indices]
+  moda(vecinos)
+})
+# Asignar los estratos imputados
+sin_nm_prqd$nm_prqd  <- nm_prqd_imputado
+sin_nm_prqd_TEST$nm_prqd  <- nm_prqd_imputado_Test
+# Combinar todo
+Train_localizado <- bind_rows(con_nm_prqd, sin_nm_prqd)
+Test_localizado <- bind_rows(con_nm_prqd_TEST, sin_nm_prqd_TEST)
+
+
+
+
+# CODIGO PARA VALIDACION CRUZADA ESPACIAL:
+# ya es un sf y esta en proyecccion magnas sirgas
+library(spatialsample)
+
+set.seed(86936)
+block_folds <- spatial_block_cv(Train_localizado, v = 5)
+block_folds
+autoplot(block_folds)
