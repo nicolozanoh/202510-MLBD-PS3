@@ -15,6 +15,7 @@ Packages <- c("tidyverse",
               "sf",
               "tmaptools",
               "osmdata",
+              "FNN",
               "visdat",
               "leaflet",
               "stringi", # Manipular cadenas de texto
@@ -63,6 +64,14 @@ Train_localizado <- Train_localizado %>%
 Test_localizado <- Test_localizado %>%
   mutate(across(all_of(vars), as.character)) %>%
   filter(if_all(all_of(vars), ~ !is.na(.)))
+
+# Imputamos bth_prb valores inf por el minimo de bth_prb
+# Encontrar el mínimo valor finito en bth_prb
+min_finite <- min(Train_localizado$bth_prb[is.finite(Train_localizado$bth_prb)], na.rm = TRUE)
+
+# Reemplazar valores Inf con el mínimo finito
+Train_localizado <- Train_localizado %>%
+  mutate(bth_prb = ifelse(is.infinite(bth_prb), min_finite, bth_prb))
 
 
 
@@ -146,9 +155,19 @@ Test_localizado <- bind_rows(con_nm_prqd_TEST, sin_nm_prqd_TEST)
 
 # CODIGO PARA VALIDACION CRUZADA ESPACIAL:
 # ya es un sf y esta en proyecccion magnas sirgas
-library(spatialsample)
 
+
+
+
+# Parto mi trainning set para tener la oportunidade evaluar el desempeño del modelo:
+set.seed(123)
+split <- spatial_block_split(Train_localizado, prop = 0.8)
+ev_train_data <- training(split)
+ev_test_data  <- testing(split)
+
+library(spatialsample)
 set.seed(86936)
-block_folds <- spatial_block_cv(Train_localizado, v = 5)
+block_folds <- spatial_block_cv(ev_train_data, v = 5)
 block_folds
 autoplot(block_folds)
+
