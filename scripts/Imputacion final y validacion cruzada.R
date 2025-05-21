@@ -1,4 +1,3 @@
-# Validacion cruzada espacial y modelos:
 Packages <- c("tidyverse", 
               "ggplot2", 
               "pacman", 
@@ -34,6 +33,11 @@ invisible(lapply(Packages, function(pkg) {
 # llamamos nuestras bases de datos:
 setwd("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\")
 
+localidades_urbanas <- st_read(dsn = "Bases de datos propias\\localidades urbanas", layer = "localidades_urbanas")
+names(localidades_urbanas) 
+class(localidades_urbanas)    # sf + data.frame 
+head(localidades_urbanas)     # primeras filas (tabla de atributos)
+str(localidades_urbanas)      # estructura (geometría + atributos)
 
 Train_localizado<- st_read(dsn = "Bases de datos propias\\Train", layer = "Train_localizado")
 names(Train_localizado)  
@@ -51,14 +55,6 @@ str(Test_localizado)      # estructura (geometría + atributos)
 
 # Hacemos partision de chapinero 
 Train_localizado <- Train_localizado %>% subset( loc_nmb != 'CHAPINERO' | is.na(loc_nmb)==TRUE )
-# Eliminar filas con NA en esas columnas
-vars <- c("title", "descrpt", "clnd_tx")
-Train_localizado <- Train_localizado %>%
-  mutate(across(all_of(vars), as.character)) %>%
-  filter(if_all(all_of(vars), ~ !is.na(.)))
-Test_localizado <- Test_localizado %>%
-  mutate(across(all_of(vars), as.character)) %>%
-  filter(if_all(all_of(vars), ~ !is.na(.)))
 
 # Imputamos bth_prb valores inf por el minimo de bth_prb
 # Encontrar el mínimo valor finito en bth_prb
@@ -138,31 +134,44 @@ nm_prqd_imputado_Test <- apply(knn_result_Test$nn.index, 1, function(indices) {
   vecinos <- con_nm_prqd_TEST$nm_prqd [indices]
   moda(vecinos)
 })
-# Asignar los estratos imputados
+# Asignar los nm_prqd imputados
 sin_nm_prqd$nm_prqd  <- nm_prqd_imputado
 sin_nm_prqd_TEST$nm_prqd  <- nm_prqd_imputado_Test
 # Combinar todo
 Train_localizado <- bind_rows(con_nm_prqd, sin_nm_prqd)
 Test_localizado <- bind_rows(con_nm_prqd_TEST, sin_nm_prqd_TEST)
 
+########## Imputacion Numero de codigo de manzana #################################################
+# Separar los puntos con y sin estrato
+con_cod_man    <- Train_localizado %>% filter(!is.na(cod_man))
+sin_cod_man    <- Train_localizado %>% filter(is.na(cod_man))
 
+con_cod_man_TEST  <- Test_localizado %>% filter(!is.na(cod_man))
+sin_cod_man_TEST  <- Test_localizado %>% filter(is.na(cod_man ))
+# Extraer coordenadas en formato matriz para kNN
+coords_con_cod_man <- st_coordinates(st_centroid(con_cod_man))
+coords_sin_cod_man <- st_coordinates(st_centroid(sin_cod_man))
 
+coords_con_cod_man_TEST <- st_coordinates(st_centroid(con_cod_man_TEST))
+coords_sin_cod_man_TEST <- st_coordinates(st_centroid(sin_cod_man_TEST))
+# Buscar los k vecinos más cercanos (aquí usamos k = 5)
+knn_result <- get.knnx(coords_con_cod_man, coords_sin_cod_man, k = 5)
+knn_result_Test <- get.knnx(coords_con_cod_man_TEST, coords_sin_cod_man_TEST, k = 5)
 
-# CODIGO PARA VALIDACION CRUZADA ESPACIAL:
-# ya es un sf y esta en proyecccion magnas sirgas
+# Imputar estrato usando moda de los vecinos
+cod_man_imputado <- apply(knn_result$nn.index, 1, function(indices) {
+  vecinos <- con_cod_man$cod_man [indices]
+  moda(vecinos)
+})
 
-
-
-
-# Parto mi trainning set para tener la oportunidade evaluar el desempeño del modelo:
-set.seed(123)
-split <- spatial_block_split(Train_localizado, prop = 0.8)
-ev_train_data <- training(split)
-ev_test_data  <- testing(split)
-
-library(spatialsample)
-set.seed(86936)
-block_folds <- spatial_block_cv(ev_train_data, v = 5)
-block_folds
-autoplot(block_folds)
+cod_man_imputado_Test <- apply(knn_result_Test$nn.index, 1, function(indices) {
+  vecinos <- con_cod_man_TEST$cod_man [indices]
+  moda(vecinos)
+})
+# Asignar los nm_prqd imputados
+sin_cod_man$cod_man  <- cod_man_imputado
+sin_cod_man_TEST$cod_man  <- cod_man_imputado_Test
+# Combinar todo
+Train_localizado <- bind_rows(con_cod_man, sin_cod_man)
+Test_localizado <- bind_rows(con_cod_man_TEST, sin_cod_man_TEST)
 
