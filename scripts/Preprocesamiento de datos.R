@@ -115,16 +115,22 @@ Test %>%
 # Calcular la mediana ELLOS EN EL CUADERNO LO HACEN ASI PERO REALMENTE SON DEMASIADOS MAS QUE EN ESE OTRO CASO
 # Para Train:
 mediana_surface_covered <- median(Train$surface_covered, na.rm = TRUE)
+
 mediana_surface_total<- median(Train$surface_total, na.rm = TRUE)
+
 Train <- Train %>%
   mutate(rooms = replace_na(rooms, 3),
          bedrooms = replace_na(bedrooms, 3),
          bathrooms = replace_na(bathrooms, 2),
          surface_covered = replace_na(surface_covered, mediana_surface_covered),
          surface_total = replace_na(surface_total, mediana_surface_total),)
+
 # Para Test
+
 mediana_test_surface_covered <- median(Test$surface_covered, na.rm = TRUE)
+
 mediana_test_surface_total<- median(Test$surface_total, na.rm = TRUE)
+
 Test <- Test %>%
   mutate(rooms = replace_na(rooms, 3),
          bedrooms = replace_na(bedrooms, 3),
@@ -631,8 +637,6 @@ names(Test_localizado) <- c(
   "dist_rest", "dist_pol", "dist_esc", "dist_culto", "dist_disco", "dist_parq", "dist_teatr", "dist_bar", 
   "dist_plat", "dist_estac", "dist_gym", "dist_jard", "dist_park", "dist_juego", "dist_vprim", "dist_vsec", "dist_vped", 
   "dist_cycl", "dist_super", "dist_mall", "bath_perb", "bath_perr", "ratio_cov", "bdrm_perr")
-
-
 
 
 
