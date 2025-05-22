@@ -23,10 +23,14 @@ library(Metrics)
 
 
 # Recolección de los datos:
-Train <- read.csv("C:\\Users\\claud\\OneDrive\\Documents\\OneDrive - Universidad de los andes\\Universidad Los andes\\Noveno semestre\\Big data\\taller 3\\Data\\train.csv")
-Test <- read.csv("C:\\Users\\claud\\OneDrive\\Documents\\OneDrive - Universidad de los andes\\Universidad Los andes\\Noveno semestre\\Big data\\taller 3\\Data\\test.csv")
-Template <- read.csv("C:\\Users\\claud\\OneDrive\\Documents\\OneDrive - Universidad de los andes\\Universidad Los andes\\Noveno semestre\\Big data\\taller 3\\Data\\submission_template.csv")
+# Train <- read.csv("C:\\Users\\claud\\OneDrive\\Documents\\OneDrive - Universidad de los andes\\Universidad Los andes\\Noveno semestre\\Big data\\taller 3\\Data\\train.csv")
+# Test <- read.csv("C:\\Users\\claud\\OneDrive\\Documents\\OneDrive - Universidad de los andes\\Universidad Los andes\\Noveno semestre\\Big data\\taller 3\\Data\\test.csv")
+# Template <- read.csv("C:\\Users\\claud\\OneDrive\\Documents\\OneDrive - Universidad de los andes\\Universidad Los andes\\Noveno semestre\\Big data\\taller 3\\Data\\submission_template.csv")
 
+
+Train <- read.csv("stores\\raw\\train.csv")
+Test <- read.csv("stores\\raw\\test.csv")
+Template <- read.csv("stores\\raw\\submission_template.csv")
 
 # Agregar columna is_test
 Train$is_test <- 0

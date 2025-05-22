@@ -44,9 +44,13 @@ invisible(lapply(Packages, function(pkg) {
 
 
 # Recolección de los datos:
-Train <- read.csv("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\train.csv")
-Test <- read.csv("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\test.csv")
-Template <- read.csv("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\submission_template.csv")
+# Train <- read.csv("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\train.csv")
+# Test <- read.csv("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\test.csv")
+# Template <- read.csv("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\submission_template.csv")
+
+Train <- read.csv("stores\\raw\\train.csv")
+Test <- read.csv("stores\\raw\\test.csv")
+Template <- read.csv("stores\\raw\\submission_template.csv")
 
 
 ##-----------------------------------------------------------------------------##
@@ -112,31 +116,98 @@ Test %>%
 Test %>%
   count(bathrooms)
 
-# Calcular la mediana ELLOS EN EL CUADERNO LO HACEN ASI PERO REALMENTE SON DEMASIADOS MAS QUE EN ESE OTRO CASO
-# Para Train:
-mediana_surface_covered <- median(Train$surface_covered, na.rm = TRUE)
 
-mediana_surface_total<- median(Train$surface_total, na.rm = TRUE)
+Train  <- Train %>% 
+  mutate(
+    rooms = ifelse(is.na(rooms) == T, as.numeric(names(sort(table(rooms))[1])), rooms),
+    bathrooms = ifelse(is.na(bathrooms) == T, as.numeric(names(sort(table(bathrooms))[1])), bathrooms),
+    bedrooms = ifelse(is.na(bedrooms) == T, as.numeric(names(sort(table(bedrooms))[1])), bedrooms)
+  )
+
+Test  <- Test %>% 
+  mutate(
+    rooms = ifelse(is.na(rooms) == T, as.numeric(names(sort(table(rooms))[1])), rooms),
+    bathrooms = ifelse(is.na(bathrooms) == T, as.numeric(names(sort(table(bathrooms))[1])), bathrooms),
+    bedrooms = ifelse(is.na(bedrooms) == T, as.numeric(names(sort(table(bedrooms))[1])), bedrooms)
+  )
 
 Train <- Train %>%
-  mutate(rooms = replace_na(rooms, 3),
-         bedrooms = replace_na(bedrooms, 3),
-         bathrooms = replace_na(bathrooms, 2),
-         surface_covered = replace_na(surface_covered, mediana_surface_covered),
-         surface_total = replace_na(surface_total, mediana_surface_total),)
-
-# Para Test
-
-mediana_test_surface_covered <- median(Test$surface_covered, na.rm = TRUE)
-
-mediana_test_surface_total<- median(Test$surface_total, na.rm = TRUE)
+  mutate(
+    rooms = as.integer(as.character(rooms)),
+    bathrooms = as.integer(as.character(bathrooms)),
+    bedrooms = as.integer(as.character(bedrooms))
+  )
 
 Test <- Test %>%
-  mutate(rooms = replace_na(rooms, 3),
-         bedrooms = replace_na(bedrooms, 3),
-         bathrooms = replace_na(bathrooms, 2),
-         surface_covered = replace_na(surface_covered, mediana_surface_covered),
-         surface_total = replace_na(surface_total, mediana_surface_total),)
+  mutate(
+    rooms = as.integer(as.character(rooms)),
+    bathrooms = as.integer(as.character(bathrooms)),
+    bedrooms = as.integer(as.character(bedrooms))
+  )
+
+linear_imput_model_covered  <- lm(
+  surface_covered ~ 
+    property_type + rooms + bathrooms + bedrooms,
+  data = Train, na.action = na.exclude
+)   
+
+linear_imput_model_total  <- lm(
+  surface_total ~ 
+    property_type + rooms + bathrooms + bedrooms,
+  data = Train, na.action = na.exclude
+)
+
+Train$pred_total  <- predict(
+  linear_imput_model_total,
+  newdata = Train
+)
+
+Train$pred_covered  <- predict(
+  linear_imput_model_covered,
+  newdata = Train
+)
+
+linear_imput_model_covered  <- lm(
+  surface_covered ~ 
+    property_type + rooms + bathrooms + bedrooms,
+  data = Test, na.action = na.exclude
+)   
+
+linear_imput_model_total  <- lm(
+  surface_total ~ 
+    property_type + rooms + bathrooms + bedrooms,
+  data = Test, na.action = na.exclude
+)
+
+Test$pred_covered  <- predict(
+  linear_imput_model_covered,
+  newdata = Test
+)
+
+Test$pred_total  <- predict(
+  linear_imput_model_total,
+  newdata = Test
+)
+
+Train  <- Train  %>% 
+  mutate(
+    surface_covered = ifelse(is.na(surface_covered) == T, pred_covered, surface_covered),
+    surface_total = ifelse(is.na(surface_total) == T, pred_total, surface_total)
+  )
+
+Test  <- Test  %>% 
+  mutate(
+    surface_covered = ifelse(is.na(surface_covered) == T, pred_covered, surface_covered),
+    surface_total = ifelse(is.na(surface_total) == T, pred_total, surface_total)
+  )
+vis_dat(Train)
+vis_dat(Test)
+
+Train  <- Train  %>% 
+  select(-pred_covered,-pred_total)
+
+Test  <- Test  %>% 
+  select(-pred_covered,-pred_total)
 
 # Evaluamos anomalias de las variables numericas:
 stargazer(Train,type="text")
@@ -250,7 +321,7 @@ leaflet() %>%
              popup = Train$popup_html)
 
 
-setwd("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\")
+#setwd("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\")
 
 localidades <- st_read(dsn = "localidades_bog", layer = "Loca")
 
@@ -644,7 +715,7 @@ names(Test_localizado) <- c(
 
 # Guardamos en un archivo shapefield:
 # para el trianing set:
-st_write(Train_localizado, "C:\\Users\\samue\\OneDrive\\Escritorio\\Train_localizado.shp")
+st_write(Train_localizado, "raw\\work\\Train_localizado.shp")
 
 #para el testing set:
-st_write(Test_localizado, "C:\\Users\\samue\\OneDrive\\Escritorio\\Test_localizado.shp")
+st_write(Test_localizado, "raw\\work\\Test_localizado.shp")
