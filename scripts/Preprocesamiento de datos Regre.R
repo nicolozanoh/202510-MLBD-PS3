@@ -323,7 +323,7 @@ leaflet() %>%
 
 #setwd("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\")
 
-localidades <- st_read(dsn = "localidades_bog", layer = "Loca")
+localidades <- st_read(dsn = "stores\\datos espaciales\\localidades_bog", layer = "Loca")
 
 names(localidades)
 plot(localidades["LocNombre"])  
@@ -332,7 +332,7 @@ head(localidades)     # primeras filas (tabla de atributos)
 str(localidades)      # estructura (geometría + atributos)
 
 
-Manzanas <- st_read(dsn = "Manzanas", layer = "ManzanaEstratificacion")
+Manzanas <- st_read(dsn = "stores\\datos espaciales\\manzanas", layer = "ManzanaEstratificacion")
 
 names(Manzanas)
 plot(Manzanas["CODIGO_MAN"])  
@@ -699,6 +699,7 @@ names(Train_localizado) <- c(
   "bath_perb", "bath_perr", "ratio_cov", "bdrm_perr"
 )
 
+
 # Renombrar columnas de Test_localizado
 names(Test_localizado) <- c(
   "prop_id", "price", "month", "year", "surf_total", "surf_cov", "rooms", "bdrms", "bathrm", "prop_typ", 
@@ -711,11 +712,9 @@ names(Test_localizado) <- c(
 
 
 
-
-
 # Guardamos en un archivo shapefield:
 # para el trianing set:
-st_write(Train_localizado, "raw\\work\\Train_localizado.shp")
+st_write(Train_localizado, "stores\\work\\Train_localizado_reg\\Train_localizado_reg.shp")
 
 #para el testing set:
-st_write(Test_localizado, "raw\\work\\Test_localizado.shp")
+st_write(Test_localizado, "stores\\work\\Test_localizado_reg\\Test_localizado_reg.shp")

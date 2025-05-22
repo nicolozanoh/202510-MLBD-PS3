@@ -463,8 +463,13 @@ data_texto_test <- data_texto_completa %>% filter(is_test == 1)
 #Guardamos bases de datos:
 
 # Definir la ruta de guardado
-ruta_guardado <- "C:/Users/claud/OneDrive/Documents/OneDrive - Universidad de los andes/Universidad Los andes/Noveno semestre/Big data/taller 3/Data"
+#ruta_guardado <- "C:/Users/claud/OneDrive/Documents/OneDrive - Universidad de los andes/Universidad Los andes/Noveno semestre/Big data/taller 3/Data"
 
 # Guardar en formato .rds
-saveRDS(data_texto_train, file = file.path(ruta_guardado, "data_texto_train.rds"))
-saveRDS(data_texto_test,  file = file.path(ruta_guardado, "data_texto_test.rds"))
+# saveRDS(data_texto_train, file = file.path(ruta_guardado, "data_texto_train.rds"))
+# saveRDS(data_texto_test,  file = file.path(ruta_guardado, "data_texto_test.rds"))
+
+
+saveRDS(data_texto_train, file =  "data_texto_train.rds")
+saveRDS(data_texto_test,  file = "data_texto_test.rds"))
+
