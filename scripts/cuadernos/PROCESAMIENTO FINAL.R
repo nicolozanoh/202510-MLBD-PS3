@@ -8,6 +8,7 @@ p_load(
   tidyverse,
   dplyr,
   visdat,
+  sf,
   stargazer,
   leaflet,
   gridExtra,
@@ -313,7 +314,7 @@ shop  <- bogota %>%
   osmdata_sf()
 
 
-#De las features del parque nos interesa su geomoetría y donde estan ubicados 
+#De las features del parque nos interesa su geometría y donde estan ubicados 
 amenities_geometria <- amenities$osm_polygons %>%
   dplyr::select(osm_id, name, amenity)
 
@@ -719,7 +720,7 @@ Test_localizado <- bind_rows(con_cod_man_TEST, sin_cod_man_TEST)
 
 
 # Guardamos en un archivo shapefield:
-# para el trianing set:
+# para el training set:
 st_write(Train_localizado, "stores\\work\\Train\\Train.shp")
 
 #para el testing set:
