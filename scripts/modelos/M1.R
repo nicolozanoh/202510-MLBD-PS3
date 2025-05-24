@@ -27,11 +27,11 @@ pacman::p_load(
 )
 
 # 1. Rutas --------------------------------------------
-path_train <- "//stores//work//Train//Train.shp"
-path_test  <- "//stores//work//Test//Test.shp"
-dir_out    <- "//stores//work_jcp//predicciones"
+path_train <- "C://Users//jhanc//OneDrive - Universidad de los andes//CURSOS//2025-10 BDyML//Github//202510-MLBD-PS3//stores//work//Train//Train.shp"
+path_test  <- "C://Users//jhanc//OneDrive - Universidad de los andes//CURSOS//2025-10 BDyML//Github//202510-MLBD-PS3//stores//work//Test//Test.shp"
+dir_out    <- "C://Users//jhanc//OneDrive - Universidad de los andes//CURSOS//2025-10 BDyML//Github//202510-MLBD-PS3//stores//work_jcp//predicciones"
 
-list.files("//stores/work_jcp/Train", pattern = "\\.shp$")
+list.files("C://Users//jhanc//OneDrive - Universidad de los andes//CURSOS//2025-10 BDyML//Github//202510-MLBD-PS3//stores//work//Train", pattern = "\\.shp$")
 # Deberías ver "Train.shp" en el resultado
 
 head(path_train)
@@ -48,6 +48,9 @@ test_sf  <- st_read(path_test, quiet = TRUE)
 train <- train_sf |> st_drop_geometry()
 test  <- test_sf  |> st_drop_geometry()
 
+
+
+
 # 4. Semilla y cluster -----------------------------------------------------
 set.seed(777)
 cl <- makeCluster(parallel::detectCores() - 1)
@@ -56,17 +59,6 @@ registerDoParallel(cl)
 
 
 
-
-
-
-
-
-
-
-
-
-train <- "//stores//work_jcp//Train//Train.shp"
-test <- "//stores//work_jcp//Test//Test.shp"
 
 
 ## Validacion cruzada espacial
