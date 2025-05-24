@@ -48,230 +48,222 @@ Train <- read.csv("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y 
 Test <- read.csv("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\test.csv")
 Template <- read.csv("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\submission_template.csv")
 
+#Cargamos también las bases de datos extraidas de texto
+
+ruta <- "C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3"
+
+# Importar las bases .rds
+data_texto_train <- readRDS(file.path(ruta, "data_texto_train.rds"))
+data_texto_test  <- readRDS(file.path(ruta, "data_texto_test.rds"))
+
+#Unificamos las bases de datos previo a la limpieza que se va a realizar
+
+library(dplyr)
+
+# 1. Identificar columnas nuevas (excluyendo 'property_id')
+nuevas_vars_train <- setdiff(names(data_texto_train), names(Train))
+nuevas_vars_test  <- setdiff(names(data_texto_test), names(Test))
+
+# 2. Unir solo las variables que no están repetidas
+Train_completo <- Train %>%
+  left_join(data_texto_train[, c("property_id", nuevas_vars_train)], by = "property_id")
+
+Test_completo <- Test %>%
+  left_join(data_texto_test[, c("property_id", nuevas_vars_test)], by = "property_id")
+
+
+
+
+
 
 ##-----------------------------------------------------------------------------##
 
 # organización y Pre procesamiento:
 
-Train %>%
+Train_completo %>%
   count(property_type)
-Test%>%
+Test_completo %>%
   count(property_type)
-# Hay un desbalance en el test hacia apartamentos.
 
-# Redefinimos como no numericas las variables de años y meses:
-Train <- Train %>%
-  mutate(
-    year = as.factor(year),
-    month = as.factor(month))
-Test <- Test %>%
+Train_completo <- Train_completo %>%
   mutate(
     year = as.factor(year),
     month = as.factor(month))
 
-# Inspeccionamos los valores faltantes:
-Train<- Train %>% dplyr:: select(property_id, price, month, year,
-  surface_total, surface_covered, rooms, bedrooms, bathrooms,
-  property_type, lat, lon, title, description)
+Test_completo <- Test_completo %>%
+  mutate(
+    year = as.factor(year),
+    month = as.factor(month))
 
-Train <- Train %>%
-  mutate(title = na_if(title, "")) %>%
-  mutate( description= na_if(description, ""))
+Train_completo <- Train_completo %>%
+  dplyr::select(property_id, price, month, year,
+                surface_total, surface_covered, rooms, bedrooms, bathrooms,
+                property_type, lat, lon, title, description,
+                PC1:PC30, num_parqueaderos)
 
-vis_dat(Train)
+Train_completo <- Train_completo %>%
+  mutate(title = na_if(title, ""),
+         description = na_if(description, ""))
 
+vis_dat(Train_completo, warn_large_data = FALSE)
 
-Test<- Test %>% dplyr:: select(property_id, price, month, year,
-                                 surface_total, surface_covered, rooms, bedrooms, bathrooms,
-                                 property_type, lat, lon, title, description)
+Test_completo <- Test_completo %>%
+  dplyr::select(property_id, price, month, year,
+                surface_total, surface_covered, rooms, bedrooms, bathrooms,
+                property_type, lat, lon, title, description,
+                PC1:PC30, num_parqueaderos)
 
-Test <- Test %>%
-  mutate(title = na_if(title, "")) %>%
-  mutate( description= na_if(description, ""))
+Test_completo <- Test_completo %>%
+  mutate(title = na_if(title, ""),
+         description = na_if(description, ""))
 
-vis_dat(Test)
+vis_dat(Test_completo, warn_large_data = FALSE)
 
-# Existe un serio caso de valores faltantes en surface_covered & surface_total
-# Un menor numero para rooms & bathrooms.
+# Imputaciones
+Train_completo  <- Train_completo %>% 
+  mutate(
+    rooms = ifelse(is.na(rooms), as.numeric(names(sort(table(rooms))[1])), rooms),
+    bathrooms = ifelse(is.na(bathrooms), as.numeric(names(sort(table(bathrooms))[1])), bathrooms),
+    bedrooms = ifelse(is.na(bedrooms), as.numeric(names(sort(table(bedrooms))[1])), bedrooms)
+  )
 
-# Vamos a imputar valores para el número de habitaciones,cuartos, baños, área de 
-#superficie total y cubierta. Los dos primeros con la moda al tomar valores enteros
-# y los dos últimos con la mediana.
+Test_completo  <- Test_completo %>% 
+  mutate(
+    rooms = ifelse(is.na(rooms), as.numeric(names(sort(table(rooms))[1])), rooms),
+    bathrooms = ifelse(is.na(bathrooms), as.numeric(names(sort(table(bathrooms))[1])), bathrooms),
+    bedrooms = ifelse(is.na(bedrooms), as.numeric(names(sort(table(bedrooms))[1])), bedrooms)
+  )
 
-Train %>%
-  count(rooms) %>% head() 
-Train %>%
-  count(bedrooms)
-Train %>%
-  count(bathrooms)
+Train_completo <- Train_completo %>%
+  mutate(across(c(rooms, bathrooms, bedrooms), ~ as.integer(as.character(.))))
 
-Test %>%
-  count(rooms) %>% head() 
-Test %>%
-  count(bedrooms)
-Test %>%
-  count(bathrooms)
+Test_completo <- Test_completo %>%
+  mutate(across(c(rooms, bathrooms, bedrooms), ~ as.integer(as.character(.))))
 
-# Calcular la mediana ELLOS EN EL CUADERNO LO HACEN ASI PERO REALMENTE SON DEMASIADOS MAS QUE EN ESE OTRO CASO
-# Para Train:
-mediana_surface_covered <- median(Train$surface_covered, na.rm = TRUE)
+# Imputación lineal
+linear_imput_model_covered  <- lm(surface_covered ~ property_type + rooms + bathrooms + bedrooms, data = Train_completo, na.action = na.exclude)   
+linear_imput_model_total    <- lm(surface_total ~ property_type + rooms + bathrooms + bedrooms, data = Train_completo, na.action = na.exclude)
 
-mediana_surface_total<- median(Train$surface_total, na.rm = TRUE)
-
-Train <- Train %>%
-  mutate(rooms = replace_na(rooms, 3),
-         bedrooms = replace_na(bedrooms, 3),
-         bathrooms = replace_na(bathrooms, 2),
-         surface_covered = replace_na(surface_covered, mediana_surface_covered),
-         surface_total = replace_na(surface_total, mediana_surface_total),)
+Train_completo$pred_covered <- predict(linear_imput_model_covered, newdata = Train_completo)
+Train_completo$pred_total   <- predict(linear_imput_model_total, newdata = Train_completo)
 
 # Para Test
+linear_imput_model_covered  <- lm(surface_covered ~ property_type + rooms + bathrooms + bedrooms, data = Test_completo, na.action = na.exclude)   
+linear_imput_model_total    <- lm(surface_total ~ property_type + rooms + bathrooms + bedrooms, data = Test_completo, na.action = na.exclude)
 
-mediana_test_surface_covered <- median(Test$surface_covered, na.rm = TRUE)
+Test_completo$pred_covered <- predict(linear_imput_model_covered, newdata = Test_completo)
+Test_completo$pred_total   <- predict(linear_imput_model_total, newdata = Test_completo)
 
-mediana_test_surface_total<- median(Test$surface_total, na.rm = TRUE)
+# Sustituir valores NA por predichos
+Train_completo <- Train_completo %>% 
+  mutate(
+    surface_covered = ifelse(is.na(surface_covered), pred_covered, surface_covered),
+    surface_total   = ifelse(is.na(surface_total), pred_total, surface_total)
+  )
 
-Test <- Test %>%
-  mutate(rooms = replace_na(rooms, 3),
-         bedrooms = replace_na(bedrooms, 3),
-         bathrooms = replace_na(bathrooms, 2),
-         surface_covered = replace_na(surface_covered, mediana_surface_covered),
-         surface_total = replace_na(surface_total, mediana_surface_total),)
+Test_completo <- Test_completo %>% 
+  mutate(
+    surface_covered = ifelse(is.na(surface_covered), pred_covered, surface_covered),
+    surface_total   = ifelse(is.na(surface_total), pred_total, surface_total)
+  )
 
-# Evaluamos anomalias de las variables numericas:
-stargazer(Train,type="text")
-# No hay precensia de incositencias dentro de la suerficie cubierta o total.
-stargazer(Test,type="text")
-# No hay precensia de incositencias dentro de la suerficie cubierta o total.
+vis_dat(Train_completo, warn_large_data = FALSE)
+vis_dat(Test_completo, warn_large_data = FALSE)
 
-# En la muestra de entrenamieto se calcula el precio por metro cuadrado, 
-# para inspeccionar inconsistencias:
-Train <- Train %>%
-  mutate(precio_por_mt2 = round(price / surface_total, 0))%>%
-  mutate(precio_por_mt2  =precio_por_mt2/1000000 )  ## precio x Mt2 en millones. 
-stargazer(Train["precio_por_mt2"],type="text")
+Train_completo <- Train_completo %>% select(-pred_covered, -pred_total)
+Test_completo  <- Test_completo  %>% select(-pred_covered, -pred_total)
 
-# Detectamos valores atipicos en el precio de nuestro trainig set:
-low <- round(mean(Train$precio_por_mt2) - 2*sd(Train$precio_por_mt2))
-up <- round(mean(Train$precio_por_mt2) + 2*sd(Train$precio_por_mt2))
-perc1 <- unname(round(quantile(Train$precio_por_mt2, probs = c(.01)),2))
+# Validaciones
+stargazer(Train_completo, type = "text")
+stargazer(Test_completo, type = "text")
+# Hay una incosistencia valores negativos en area de superficie se vuelven 
+# positivo dado que se presume un eror de digitacion :
+Test_completo$surface_total <- abs(Test_completo$surface_total)
 
-Graph_1 <- Train %>%
+
+# Calcular precio por metro cuadrado
+Train_completo <- Train_completo %>%
+  mutate(precio_por_mt2 = round(price / surface_total, 0) / 1e6)
+
+# Outliers
+low   <- round(mean(Train_completo$precio_por_mt2) - 2 * sd(Train_completo$precio_por_mt2))
+up    <- round(mean(Train_completo$precio_por_mt2) + 2 * sd(Train_completo$precio_por_mt2))
+perc1 <- unname(round(quantile(Train_completo$precio_por_mt2, probs = c(.01)), 2))
+
+Graph_1 <- Train_completo %>%
   ggplot(aes(y = precio_por_mt2)) +
   geom_boxplot(fill = "darkblue", alpha = 0.4) +
-  labs(
-    title = "Muestra con valores atipicos",
-    y = "Precio por metro cuadrado (millones)", x = "") +
+  labs(title = "Muestra con valores atipicos", y = "Precio por metro cuadrado (millones)", x = "") +
   theme_bw()
-Graph_2 <- Train %>%
-  filter(between(precio_por_mt2, perc1,  up)) %>% 
+
+Graph_2 <- Train_completo %>%
+  filter(between(precio_por_mt2, perc1, up)) %>% 
   ggplot(aes(y = precio_por_mt2)) +
   geom_boxplot(fill = "darkblue", alpha = 0.4) +
-  labs(
-    title = "Muestra sin los valores atipicos",
-    y = "Precio por metro cuadrado (millones)", x = "") +
+  labs(title = "Muestra sin los valores atipicos", y = "Precio por metro cuadrado (millones)", x = "") +
   theme_bw()
+
 grid.arrange(Graph_1, Graph_2, ncol = 2)
 
-# Es conguente procedemos a eliminar esos valores atipicos:
-Train <- Train %>% filter(between(precio_por_mt2, perc1, up))
+Train_completo <- Train_completo %>% filter(between(precio_por_mt2, perc1, up))
 
+# Validación espacial
+Train_completo <- Train_completo %>% filter(!is.na(lat) & !is.na(lon))
+Test_completo  <- Test_completo  %>% filter(!is.na(lat) & !is.na(lon))
 
-# Procedemos con inspeccion espacial de la muestra Train:
-
-# Eliminamos los valores faltantes de latitud o longitud
-Train <- Train %>%
-  filter(!is.na(lat) & !is.na(lon))
-Test <- Test %>%
-  filter(!is.na(lat) & !is.na(lon))
-
-# Observamos la primera visualización
 leaflet() %>%
   addTiles() %>%
-  addCircles(lng = Train$lon, 
-             lat = Train$lat)
-# Nos aseguramos que solo tengamos observaciones dentro del limite politico administrativo de Bogota
+  addCircles(lng = Train_completo$lon, lat = Train_completo$lat)
+
 limes_Bog <- getbb("Bogota Colombia")
-limes_Bog
 
-# Intente filtrar pero tambien se lleva observaciones de la localidad de teusaquillo
-# Toca intentar por texto
-#limes_chapinero <- getbb("Chapinero Bogota Colombia")
-#limes_chapinero
+Train_completo <- Train_completo %>%
+  filter(between(lon, limes_Bog[1, "min"], limes_Bog[1, "max"]),
+         between(lat, limes_Bog[2, "min"], limes_Bog[2, "max"]))
 
-Train <- Train %>%
-  filter(between(lon, limes_Bog[1, "min"], limes_Bog[1, "max"]) & 
-      between(lat, limes_Bog[2, "min"], limes_Bog[2, "max"]))
+Test_completo <- Test_completo %>%
+  filter(between(lon, limes_Bog[1, "min"], limes_Bog[1, "max"]),
+         between(lat, limes_Bog[2, "min"], limes_Bog[2, "max"]))
 
-Test <- Test %>%
-  filter(between(lon, limes_Bog[1, "min"], limes_Bog[1, "max"]) & 
-           between(lat, limes_Bog[2, "min"], limes_Bog[2, "max"]))
-#Train <- Train %>%
-#  filter(!( between(lon, limes_chapinero[1, "min"], limes_chapinero[1, "max"]) &
-#       between(lat, limes_chapinero[2, "min"], limes_chapinero[2, "max"])))
+Train_completo <- Train_completo %>% filter(surface_covered > 15)
+Test_completo  <- Test_completo  %>% filter(surface_covered > 15)
 
-
-# Eliminamos los inmuebles con área menor a 15
-Train <- Train %>% filter(surface_covered > 15)
-Test <- Test %>% filter(surface_covered > 15)
-# Escalamos para que se pueda graficar
-Train <- Train %>% 
+Train_completo <- Train_completo %>%
   mutate(precio_por_mt2_sc = (precio_por_mt2 - min(precio_por_mt2, na.rm = TRUE)) / 
            (max(precio_por_mt2, na.rm = TRUE) - min(precio_por_mt2, na.rm = TRUE)))
 
-# Asignamos colores según tipo de inmueble
-Train <- Train %>%
-  mutate(color = case_when(property_type == "Apartamento" ~ "#EE6363",
-                           property_type == "Casa" ~ "#7AC5CD",
-                           TRUE ~ "gray"))  # Por si hay más tipos
+Train_completo <- Train_completo %>%
+  mutate(color = case_when(
+    property_type == "Apartamento" ~ "#EE6363",
+    property_type == "Casa" ~ "#7AC5CD",
+    TRUE ~ "gray"
+  ))
 
-# Creamos el popup en HTML
-Train <- Train %>%
+Train_completo <- Train_completo %>%
   mutate(popup_html = paste0("<b>Precio:</b> ", scales::dollar(price),
                              "<br> <b>Área:</b> ", as.integer(surface_total), " mt2",
                              "<br> <b>Tipo de inmueble:</b> ", property_type,
                              "<br> <b>Alcobas:</b> ", as.integer(rooms),
                              "<br> <b>Baños:</b> ", as.integer(bathrooms)))
 
-# Coordenadas centrales
-latitud_central <- mean(Train$lat, na.rm = TRUE)
-longitud_central <- mean(Train$lon, na.rm = TRUE)
+latitud_central <- mean(Train_completo$lat, na.rm = TRUE)
+longitud_central <- mean(Train_completo$lon, na.rm = TRUE)
 
-# Creamos el plot
 leaflet() %>%
   addTiles() %>%
   setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
-  addCircles(lng = Train$lon, 
-             lat = Train$lat, 
-             col = Train$color,
+  addCircles(lng = Train_completo$lon, 
+             lat = Train_completo$lat, 
+             col = Train_completo$color,
              fillOpacity = 1,
              opacity = 1,
-             radius = Train$precio_por_mt2_sc*10,
-             popup = Train$popup_html)
+             radius = Train_completo$precio_por_mt2_sc * 10,
+             popup = Train_completo$popup_html)
 
-
-setwd("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\")
-
+# Lectura de capas espaciales
 localidades <- st_read(dsn = "localidades_bog", layer = "Loca")
-
-names(localidades)
-plot(localidades["LocNombre"])  
-class(localidades)    # sf + data.frame 
-head(localidades)     # primeras filas (tabla de atributos)
-str(localidades)      # estructura (geometría + atributos)
-
-
 Manzanas <- st_read(dsn = "Manzanas", layer = "ManzanaEstratificacion")
 
-names(Manzanas)
-plot(Manzanas["CODIGO_MAN"])  
-class(Manzanas)    # sf + data.frame 
-head(Manzanas)     # primeras filas (tabla de atributos)
-str(Manzanas)      # estructura (geometría + atributos)
-
-
-# DEBERIAMOS DE PENSAR EN ELIMINAR SUBA Y CIUDAD BOLIVAR MUY POCAS OBSERVACIONES EL MAPA SE DISTORCIONA MUCHO
-# Filtrar localidades urbanas
 localidades_urbanas <- localidades %>%
   filter(LocNombre %in% c("USAQUEN", "CHAPINERO", "SANTA FE", "SAN CRISTOBAL",
                           "USME", "TUNJUELITO", "BOSA", "KENNEDY", "FONTIBON", 
@@ -279,24 +271,18 @@ localidades_urbanas <- localidades %>%
                           "LOS MARTIRES", "ANTONIO NARIÑO", "PUENTE ARANDA", 
                           "CANDELARIA", "RAFAEL URIBE URIBE", "CIUDAD BOLIVAR"))
 
-# Plot con ggplot2
 ggplot() +
   geom_sf(data = localidades_urbanas, fill = "red", color = "black", alpha = 0.4) +
   geom_sf(data = Manzanas, fill = NA, color = "blue", size = 0.3) +
   labs(title = "Localidades Urbanas y Sectores Urbanos Coincidentes") +
   theme_minimal()
 
+# Convertir a objetos sf
+sf_Train <- st_as_sf(Train_completo, coords = c("lon", "lat"), crs = 4626) %>% st_transform(crs = 3116)
+sf_Test  <- st_as_sf(Test_completo, coords = c("lon", "lat"), crs = 4626) %>% st_transform(crs = 3116)
 
-
-#Tranformacion de nuestros datos de viviendas en Train a sf utilizando MAGNA-SIRGAS Bogotá proyectado
-sf_Train<- st_as_sf(Train, coords = c("lon", "lat"),  crs = 4626)
-sf_Train <- st_transform(sf_Train, crs = 3116)
 localidades_urbanas <- st_transform(localidades_urbanas, crs = 3116)
 Manzanas <- st_transform(Manzanas, crs = 3116)
-#lo mismo para Test:
-sf_Test<- st_as_sf(Test, coords = c("lon", "lat"),  crs = 4626)
-sf_Test <- st_transform(sf_Test, crs = 3116)
-
 
 # Definimos limites de bogota en Magnas sirgas proyectado 
 pry_lim_x = c(999000, 1015000)
@@ -307,7 +293,6 @@ ggplot()+
   geom_sf(data=sf_Train,aes(color = precio_por_mt2) ,shape=15, size=0.3)+
   theme_bw()
 
-# Deberiamos pensar en quitar Usme y ciudad Bolivar
 
 # Unión espacial: agregar nombre de localidad a cada propiedad
 Train_localizado <- st_join(sf_Train, localidades_urbanas)
@@ -332,7 +317,7 @@ bogota
 # Recupero mis features de interes para mi espacio:
 amenities <- bogota %>%
   add_osm_feature(key = "amenity", value = c("university", "bar", 
-                                              "school", "hospital", 
+                                             "school", "hospital", 
                                              "restaurant", "parking", "place_of_worship", 
                                              "police","theatre","nightclub")) %>%
   osmdata_sf()
@@ -515,15 +500,7 @@ leaflet() %>%
              lat = shop_centroides$y, 
              col = "darkblue", opacity = 0.5, radius = 1)
 
-#Creamos el mapa de Bogota con los supermarkets: NO TIENE MUCHOS NO SE SI ELIMINAR???
-leaflet() %>%
-  addTiles() %>%
-  setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
-  addPolygons(data = building_geometria, col = "red",weight = 10,
-              opacity = 0.8, popup = building_geometria$name) %>%
-  addCircles(lng = building_centroides$x, 
-             lat = building_centroides$y, 
-             col = "darkblue", opacity = 0.5, radius = 1)
+
 
 # Calculamos distancias entre viviendas y features:
 # Como calcularemos distancias tendremos que usar un Magna sirgas proyectado (ya todo esta en esta proyeccion).
@@ -558,7 +535,6 @@ Train_localizado <- calculo_distancias_por_feature(primary, "dist_via_primary")
 Train_localizado <- calculo_distancias_por_feature(secondary, "dist_via_secondary")
 Train_localizado <- calculo_distancias_por_feature(pedestrian, "dist_via_pedestrian")
 Train_localizado <- calculo_distancias_por_feature(cycleway, "dist_cycleway")
-Train_localizado <- calculo_distancias_por_feature(supermarket, "dist_supermarket")
 Train_localizado <- calculo_distancias_por_feature(mall, "dist_mall")
 
 
@@ -590,7 +566,6 @@ Test_localizado <- calculo_distancias_Test_localizado_por_feature_(primary, "dis
 Test_localizado <- calculo_distancias_Test_localizado_por_feature_(secondary, "dist_via_secondary")
 Test_localizado <- calculo_distancias_Test_localizado_por_feature_(pedestrian, "dist_via_pedestrian")
 Test_localizado <- calculo_distancias_Test_localizado_por_feature_(cycleway, "dist_cycleway")
-Test_localizado <- calculo_distancias_Test_localizado_por_feature_(supermarket, "dist_supermarket")
 Test_localizado <- calculo_distancias_Test_localizado_por_feature_(mall, "dist_mall")
 
 
@@ -611,40 +586,174 @@ Test_localizado <- crear_variables_base_vivienda(Test_localizado)
 
 
 names(Train_localizado
-      )
+)
 
 
 names(Test_localizado)
 
 
 names(Train_localizado) <- c(
-  "prop_id", "price", "month", "year", "surf_total", "surf_cov", "rooms", "bdrms", "bathrm", "prop_typ",
-  "title", "descript", "prec_mt2", "prec_mt2sc", "color", "popuphtml", "loc_nomb", "loc_admin", "loc_area",
+  "property_id", "price", "month", "year", "surf_total", "surf_cov", "rooms", "bdrms", "bathrm", "prop_typ",
+  "title", "descript","PC1","PC2","PC3","PC4","PC5","PC6",
+  "PC7","PC8","PC9","PC10","PC11","PC12","PC13","PC14","PC15","PC16","PC17","PC18","PC19","PC20","PC21","PC22","PC23",
+  "PC24","PC25","PC26","PC27","PC28","PC29","PC30","num_parqueaderos","prec_mt2", "prec_mt2sc", "color", "popuphtml", "loc_nomb", "loc_admin", "loc_area",
   "loc_cod", "shp_leng", "shp_area", "obj_id", "cod_man", "estrato", "cod_zon", "cod_cri", "normatv",
   "acto_admin", "num_act", "fecha_act", "escala_cp", "fecha_cap", "responsab", "shp_area2", "shp_len", 
   "geometry", "dist_univ", "dist_hosp", "dist_rest", "dist_pol", "dist_esc", "dist_culto", "dist_disco", 
   "dist_parq", "dist_teatr", "dist_bar", "dist_plat", "dist_estac", "dist_gym", "dist_jard", "dist_park", 
-  "dist_juego", "dist_vprim", "dist_vsec", "dist_vped", "dist_cycl", "dist_super", "dist_mall", 
+  "dist_juego", "dist_vprim", "dist_vsec", "dist_vped", "dist_cycl", "dist_mall", 
   "bath_perb", "bath_perr", "ratio_cov", "bdrm_perr"
 )
 
 # Renombrar columnas de Test_localizado
 names(Test_localizado) <- c(
-  "prop_id", "price", "month", "year", "surf_total", "surf_cov", "rooms", "bdrms", "bathrm", "prop_typ", 
-  "title", "descript", "obj_id", "cod_man", "estrato", "cod_zon", "cod_cri", "normatv", "acto_admin", "num_act", 
+  "property_id", "price", "month", "year", "surf_total", "surf_cov", "rooms", "bdrms", "bathrm", "prop_typ", 
+  "title", "descript","PC1","PC2","PC3","PC4","PC5","PC6",
+  "PC7","PC8","PC9","PC10","PC11","PC12","PC13","PC14","PC15","PC16","PC17","PC18","PC19","PC20","PC21","PC22","PC23",
+  "PC24","PC25","PC26","PC27","PC28","PC29","PC30","num_parqueaderos","obj_id", "cod_man", "estrato", "cod_zon", "cod_cri", "normatv", "acto_admin", "num_act", 
   "fecha_act", "escala_cp", "fecha_cap", "responsab", "shp_area", "shp_len", "geometry", "dist_univ", "dist_hosp", 
   "dist_rest", "dist_pol", "dist_esc", "dist_culto", "dist_disco", "dist_parq", "dist_teatr", "dist_bar", 
   "dist_plat", "dist_estac", "dist_gym", "dist_jard", "dist_park", "dist_juego", "dist_vprim", "dist_vsec", "dist_vped", 
-  "dist_cycl", "dist_super", "dist_mall", "bath_perb", "bath_perr", "ratio_cov", "bdrm_perr")
+  "dist_cycl", "dist_mall", "bath_perb", "bath_perr", "ratio_cov", "bdrm_perr")
 
 
 
+Train_localizado <- Train_localizado %>%
+  left_join(Train %>% select(property_id, lat, lon), by = "property_id")
+
+Test_localizado <- Test_localizado %>%
+  left_join(Test %>% select(property_id, lat, lon), by = "property_id")
+
+
+# Hacemos partision de chapinero 
+Train_localizado <- Train_localizado %>% subset( loc_nomb != 'CHAPINERO' | is.na(loc_nomb)==TRUE )
+
+# Imputamos bth_prb valores inf por el minimo de bath_perb
+# Encontrar el mínimo valor finito en bath_perb
+min_finite <- min(Train_localizado$bath_perb[is.finite(Train_localizado$bath_perb)], na.rm = TRUE)
+
+# Reemplazar valores Inf con el mínimo finito
+Train_localizado <- Train_localizado %>%
+  mutate(bth_prb = ifelse(is.infinite(bath_perb), min_finite, bath_perb))
+
+
+
+
+########## Imputacion de variables clave #################################################
+
+# Función para calcular la moda
+moda <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+########## Imputacion estrato #################################################
+# Separar los puntos con y sin estrato
+con_estrato <- Train_localizado %>% filter(!is.na(estrato))
+sin_estrato <- Train_localizado %>% filter(is.na(estrato))
+
+con_estrato_TEST <- Test_localizado %>% filter(!is.na(estrato))
+sin_estrato_TEST <- Test_localizado %>% filter(is.na(estrato))
+# Extraer coordenadas en formato matriz para kNN
+coords_con <- st_coordinates(st_centroid(con_estrato))
+coords_sin <- st_coordinates(st_centroid(sin_estrato))
+
+coords_con_TEST <- st_coordinates(st_centroid(con_estrato_TEST))
+coords_sin_TEST <- st_coordinates(st_centroid(sin_estrato_TEST))
+
+# Buscar los k vecinos más cercanos (aquí usamos k = 5)
+knn_result_TRAIN <- get.knnx(coords_con, coords_sin, k = 5)
+knn_result_TEST <- get.knnx(coords_con_TEST, coords_sin_TEST, k = 5)
+
+# Imputar estrato usando moda de los vecinos
+estrato_imputado_TRAIN <- apply(knn_result_TRAIN$nn.index, 1, function(indices) {
+  vecinos <- con_estrato$estrato[indices]
+  moda(vecinos)
+})
+
+estrato_imputado_TEST <- apply(knn_result_TEST$nn.index, 1, function(indices) {
+  vecinos <- con_estrato_TEST$estrato[indices]
+  moda(vecinos)
+})
+# Asignar los estratos imputados
+sin_estrato$estrato <- estrato_imputado_TRAIN
+sin_estrato_TEST$estrato <- estrato_imputado_TEST
+# Combinar todo
+Train_localizado <- bind_rows(con_estrato, sin_estrato)
+Test_localizado <- bind_rows(con_estrato_TEST, sin_estrato_TEST)
+########## Imputacion Numero de parqueaderos #################################################
+# Separar los puntos con y sin estrato
+con_nm_prqd  <- Train_localizado %>% filter(!is.na(num_parqueaderos ))
+sin_nm_prqd  <- Train_localizado %>% filter(is.na(num_parqueaderos ))
+
+con_nm_prqd_TEST  <- Test_localizado %>% filter(!is.na(num_parqueaderos ))
+sin_nm_prqd_TEST  <- Test_localizado %>% filter(is.na(num_parqueaderos ))
+# Extraer coordenadas en formato matriz para kNN
+coords_con_nm_prqd <- st_coordinates(st_centroid(con_nm_prqd))
+coords_sin_nm_prqd <- st_coordinates(st_centroid(sin_nm_prqd))
+
+coords_con_nm_prqd_TEST <- st_coordinates(st_centroid(con_nm_prqd_TEST))
+coords_sin_nm_prqd_TEST <- st_coordinates(st_centroid(sin_nm_prqd_TEST))
+# Buscar los k vecinos más cercanos (aquí usamos k = 5)
+knn_result <- get.knnx(coords_con_nm_prqd, coords_sin_nm_prqd, k = 5)
+knn_result_Test <- get.knnx(coords_con_nm_prqd_TEST, coords_sin_nm_prqd_TEST, k = 5)
+
+# Imputar estrato usando moda de los vecinos
+nm_prqd_imputado <- apply(knn_result$nn.index, 1, function(indices) {
+  vecinos <- con_nm_prqd$num_parqueaderos [indices]
+  moda(vecinos)
+})
+
+nm_prqd_imputado_Test <- apply(knn_result_Test$nn.index, 1, function(indices) {
+  vecinos <- con_nm_prqd_TEST$num_parqueaderos [indices]
+  moda(vecinos)
+})
+# Asignar los nm_prqd imputados
+sin_nm_prqd$num_parqueaderos  <- nm_prqd_imputado
+sin_nm_prqd_TEST$num_parqueaderos  <- nm_prqd_imputado_Test
+# Combinar todo
+Train_localizado <- bind_rows(con_nm_prqd, sin_nm_prqd)
+Test_localizado <- bind_rows(con_nm_prqd_TEST, sin_nm_prqd_TEST)
+
+########## Imputacion Numero de codigo de manzana #################################################
+# Separar los puntos con y sin estrato
+con_cod_man    <- Train_localizado %>% filter(!is.na(cod_man))
+sin_cod_man    <- Train_localizado %>% filter(is.na(cod_man))
+
+con_cod_man_TEST  <- Test_localizado %>% filter(!is.na(cod_man))
+sin_cod_man_TEST  <- Test_localizado %>% filter(is.na(cod_man ))
+# Extraer coordenadas en formato matriz para kNN
+coords_con_cod_man <- st_coordinates(st_centroid(con_cod_man))
+coords_sin_cod_man <- st_coordinates(st_centroid(sin_cod_man))
+
+coords_con_cod_man_TEST <- st_coordinates(st_centroid(con_cod_man_TEST))
+coords_sin_cod_man_TEST <- st_coordinates(st_centroid(sin_cod_man_TEST))
+# Buscar los k vecinos más cercanos (aquí usamos k = 5)
+knn_result <- get.knnx(coords_con_cod_man, coords_sin_cod_man, k = 5)
+knn_result_Test <- get.knnx(coords_con_cod_man_TEST, coords_sin_cod_man_TEST, k = 5)
+
+# Imputar estrato usando moda de los vecinos
+cod_man_imputado <- apply(knn_result$nn.index, 1, function(indices) {
+  vecinos <- con_cod_man$cod_man [indices]
+  moda(vecinos)
+})
+
+cod_man_imputado_Test <- apply(knn_result_Test$nn.index, 1, function(indices) {
+  vecinos <- con_cod_man_TEST$cod_man [indices]
+  moda(vecinos)
+})
+# Asignar los nm_prqd imputados
+sin_cod_man$cod_man  <- cod_man_imputado
+sin_cod_man_TEST$cod_man  <- cod_man_imputado_Test
+# Combinar todo
+Train_localizado <- bind_rows(con_cod_man, sin_cod_man)
+Test_localizado <- bind_rows(con_cod_man_TEST, sin_cod_man_TEST)
 
 
 
 # Guardamos en un archivo shapefield:
 # para el trianing set:
-st_write(Train_localizado, "C:\\Users\\samue\\OneDrive\\Escritorio\\Train_localizado.shp")
+st_write(Train_localizado, "C:\\Users\\samue\\OneDrive\\Escritorio\\Train.shp")
 
 #para el testing set:
-st_write(Test_localizado, "C:\\Users\\samue\\OneDrive\\Escritorio\\Test_localizado.shp")
+st_write(Test_localizado, "C:\\Users\\samue\\OneDrive\\Escritorio\\Test.shp")
+
