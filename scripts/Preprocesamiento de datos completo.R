@@ -44,9 +44,9 @@ invisible(lapply(Packages, function(pkg) {
 
 
 # Recolección de los datos:
-Train <- read.csv("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\train.csv")
-Test <- read.csv("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\test.csv")
-Template <- read.csv("C:\\Users\\samue\\OneDrive\\Escritorio\\Economia\\Big Data y Machine Learning\\Taller 3\\submission_template.csv")
+train <- read.csv("c:\\users\\samue\\onedrive\\escritorio\\economia\\big data y machine learning\\taller 3\\train.csv")
+test <- read.csv("c:\\users\\samue\\onedrive\\escritorio\\economia\\big data y machine learning\\taller 3\\test.csv")
+template <- read.csv("c:\\users\\samue\\onedrive\\escritorio\\economia\\big data y machine learning\\taller 3\\submission_template.csv")
 
 #Cargamos también las bases de datos extraidas de texto
 
@@ -70,10 +70,6 @@ Train_completo <- Train %>%
 
 Test_completo <- Test %>%
   left_join(data_texto_test[, c("property_id", nuevas_vars_test)], by = "property_id")
-
-
-
-
 
 
 ##-----------------------------------------------------------------------------##
