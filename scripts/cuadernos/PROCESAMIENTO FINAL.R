@@ -8,6 +8,7 @@ p_load(
   tidyverse,
   dplyr,
   visdat,
+  sf,
   stargazer,
   leaflet,
   gridExtra,
@@ -145,7 +146,7 @@ Test_completo  <- Test_completo  %>% select(-pred_covered, -pred_total)
 stargazer(Train_completo, type = "text")
 stargazer(Test_completo, type = "text")
 # Hay una incosistencia valores negativos en area de superficie se vuelven 
-# positivo dado que se presume un eror de digitacion :
+# positivo dado que se presume un error de digitacion :
 Test_completo$surface_total <- abs(Test_completo$surface_total)
 
 
@@ -313,7 +314,7 @@ shop  <- bogota %>%
   osmdata_sf()
 
 
-#De las features del parque nos interesa su geomoetría y donde estan ubicados 
+#De las features del parque nos interesa su geometría y donde estan ubicados 
 amenities_geometria <- amenities$osm_polygons %>%
   dplyr::select(osm_id, name, amenity)
 
@@ -333,7 +334,7 @@ shop_geometria <- st_as_sf(shop$osm_polygons) %>%
   dplyr::select(osm_id, name, shop)
 
 
-# El area urbana de bogota es lo sufcientemente plana para guiarse fielmente por los centorides:
+# El area urbana de bogota es lo suficientemente plana para guiarse fielmente por los centroides:
 
 calculo_centroides <- function(data) {
   # Calculamos los centroides
@@ -412,7 +413,7 @@ building <- dividir_por_categoria(building_centroides)
 names(building)  
 list2env(building, envir = .GlobalEnv)
 
-#Creamos el mapa de Bogota con las ammenity seleccionadas:
+# Creamos el mapa de Bogota con las ammenity seleccionadas:
 leaflet() %>%
   addTiles() %>%
   setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
@@ -421,7 +422,7 @@ leaflet() %>%
   addCircles(lng = amenities_centroides$x, 
              lat = amenities_centroides$y, 
              col = "darkblue", opacity = 0.5, radius = 1)
-#Creamos el mapa de Bogota con las public_transport seleccionadas:
+# Creamos el mapa de Bogota con las public_transport seleccionadas:
 leaflet() %>%
   addTiles() %>%
   setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
@@ -430,7 +431,7 @@ leaflet() %>%
   addCircles(lng = public_transport_centroides$x, 
              lat = public_transport_centroides$y, 
              col = "darkblue", opacity = 0.5, radius = 1)
-#Creamos el mapa de Bogota con las leisure seleccionadas:
+# Creamos el mapa de Bogota con las leisure seleccionadas:
 leaflet() %>%
   addTiles() %>%
   setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
@@ -440,7 +441,7 @@ leaflet() %>%
              lat = leisure_centroides$y, 
              col = "darkblue", opacity = 0.5, radius = 1)
 
-#Creamos el mapa de Bogota con las leisure seleccionadas:
+# Creamos el mapa de Bogota con las leisure seleccionadas:
 leaflet() %>%
   addTiles() %>%
   setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
@@ -458,7 +459,7 @@ ggplot() +
 
 
 
-#Creamos el mapa de Bogota con los mall:
+# Creamos el mapa de Bogota con los mall:
 leaflet() %>%
   addTiles() %>%
   setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
@@ -537,7 +538,7 @@ Test_localizado <- calculo_distancias_Test_localizado_por_feature_(cycleway, "di
 Test_localizado <- calculo_distancias_Test_localizado_por_feature_(mall, "dist_mall")
 
 
-# Porcedemos a crear variables a paritrde la informaicon de la vivienda:
+# Procedemos a crear variables a partir de la informacion de la vivienda:
 crear_variables_base_vivienda <- function(data){
   data <- data %>% 
     mutate(
@@ -556,9 +557,7 @@ Test_localizado <- crear_variables_base_vivienda(Test_localizado)
 names(Train_localizado
 )
 
-
 names(Test_localizado)
-
 
 names(Train_localizado) <- c(
   "property_id", "price", "month", "year", "surf_total", "surf_cov", "rooms", "bdrms", "bathrm", "prop_typ",
@@ -593,7 +592,7 @@ Test_localizado <- Test_localizado %>%
   left_join(Test %>% select(property_id, lat, lon), by = "property_id")
 
 
-# Hacemos partision de chapinero 
+# Hacemos particion de Chapinero 
 #Train_localizado <- Train_localizado %>% subset( loc_nomb != 'CHAPINERO' | is.na(loc_nomb)==TRUE )
 
 # Imputamos bth_prb valores inf por el minimo de bath_perb
@@ -621,6 +620,7 @@ sin_estrato <- Train_localizado %>% filter(is.na(estrato))
 
 con_estrato_TEST <- Test_localizado %>% filter(!is.na(estrato))
 sin_estrato_TEST <- Test_localizado %>% filter(is.na(estrato))
+
 # Extraer coordenadas en formato matriz para kNN
 coords_con <- st_coordinates(st_centroid(con_estrato))
 coords_sin <- st_coordinates(st_centroid(sin_estrato))
@@ -648,6 +648,7 @@ sin_estrato_TEST$estrato <- estrato_imputado_TEST
 # Combinar todo
 Train_localizado <- bind_rows(con_estrato, sin_estrato)
 Test_localizado <- bind_rows(con_estrato_TEST, sin_estrato_TEST)
+
 ########## Imputacion Numero de parqueaderos #################################################
 # Separar los puntos con y sin estrato
 con_nm_prqd  <- Train_localizado %>% filter(!is.na(num_parqueaderos ))
@@ -719,7 +720,7 @@ Test_localizado <- bind_rows(con_cod_man_TEST, sin_cod_man_TEST)
 
 
 # Guardamos en un archivo shapefield:
-# para el trianing set:
+# para el training set:
 st_write(Train_localizado, "stores\\work\\Train\\Train.shp")
 
 #para el testing set:

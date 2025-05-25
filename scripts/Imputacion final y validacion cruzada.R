@@ -53,7 +53,7 @@ str(Test_localizado)      # estructura (geometría + atributos)
 
 
 
-# Hacemos partision de chapinero 
+# Hacemos particion de chapinero 
 Train_localizado <- Train_localizado %>% subset( loc_nmb != 'CHAPINERO' | is.na(loc_nmb)==TRUE )
 
 # Imputamos bth_prb valores inf por el minimo de bth_prb
