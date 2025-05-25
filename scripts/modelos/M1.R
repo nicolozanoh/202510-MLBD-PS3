@@ -27,9 +27,64 @@ pacman::p_load(
 )
 
 # 1. Rutas --------------------------------------------
-path_train <- "C://Users//jhanc//OneDrive - Universidad de los andes//CURSOS//2025-10 BDyML//Github//202510-MLBD-PS3//stores//work//Train//Train.shp"
-path_test  <- "C://Users//jhanc//OneDrive - Universidad de los andes//CURSOS//2025-10 BDyML//Github//202510-MLBD-PS3//stores//work//Test//Test.shp"
-dir_out    <- "C://Users//jhanc//OneDrive - Universidad de los andes//CURSOS//2025-10 BDyML//Github//202510-MLBD-PS3//stores//work_jcp//predicciones"
+
+# 1. Construir rutas de forma segura ---------------------------
+base_dir <- "C://work"    # toda con /
+path_train <- file.path(base_dir, "Train", "Train.shp")
+path_test  <- file.path(base_dir, "Test", "Test.shp")
+dir_out    <- file.path(base_dir, "predicciones_jcp")
+
+print(path_train)
+
+# Comprobar que existen
+stopifnot(file.exists(path_train), file.exists(path_test))
+
+
+
+# 2. Leer shapefiles -------------------------------------------
+library(sf)
+train_sf <- st_read(path_train, quiet = TRUE)
+test_sf  <- st_read(path_test, quiet  = TRUE)
+
+# 3. Drop geometry para modelar -------------------------------------------
+train <- train_sf |> st_drop_geometry()
+test  <- test_sf  |> st_drop_geometry()
+
+
+
+
+
+
+
+
+
+
+#### PRUEBAAAAS
+
+## Otra solucion
+
+library(doFuture)
+plan(multisession, workers = ncores)   # crea sesiones sin problemas de \U
+registerDoFuture()
+
+# 4. Semilla y cluster -----------------------------------------------------
+set.seed(777)
+library(doParallel)           # ya trae 'parallel' de fondo
+cl <- makeCluster(parallel::detectCores() - 1)
+registerDoParallel(cl)
+
+# ‘parallelly’ busca automáticamente la mejor estrategia
+library(parallelly)
+cl <- makeClusterPSOCK(workers = availableCores() - 1)
+registerDoParallel(cl)
+
+
+
+# Lista todo lo que termine en .shp dentro de la carpeta base
+list.files("//stores/work_jcp", pattern = "\\.shp$", recursive = TRUE)
+list.files("//stores/work", pattern = "\\.shp$", recursive = TRUE)
+
+
 
 list.files("C://Users//jhanc//OneDrive - Universidad de los andes//CURSOS//2025-10 BDyML//Github//202510-MLBD-PS3//stores//work//Train", pattern = "\\.shp$")
 # Deberías ver "Train.shp" en el resultado
@@ -39,26 +94,81 @@ head(path_train)
 head(path_test)
 
 
+## Otra solucion de clusteres
+library(parallelly)
+library(doParallel)
 
-# 2. Lectura de datos ------------------------------------------------------
-train_sf <- st_read(path_train, quiet = TRUE)
-test_sf  <- st_read(path_test, quiet = TRUE)
+# Núcleos disponibles menos uno
+ncores <- max(1, parallelly::availableCores() - 1)
 
-# 3. Drop geometry para modelar -------------------------------------------
-train <- train_sf |> st_drop_geometry()
-test  <- test_sf  |> st_drop_geometry()
+# 1. Construye la ruta a Rscript y cámbiale '\' por '/'
+rscript_path <- normalizePath(
+  file.path(R.home("bin"), "Rscript.exe"),   # <— suele devolver barras normales
+  winslash = "/", mustWork = TRUE
+)
+
+print(rscript_path)  # Debe verse algo como: C:/Program Files/R/R-4.4.0/bin/Rscript.exe
+
+# 2. Crea el clúster usando esa ruta
+cl <- parallelly::makeClusterPSOCK(
+  workers   = ncores,
+  rscript   = rscript_path,
+  setup_strategy = "sequential"   # evita llamadas paralelas al inicio
+)
+
+# 3. Registra backend foreach
+doParallel::registerDoParallel(cl)
+
+
+# Opción A — Omitir la paralelización
+# library(doParallel)
+# cl <- makeCluster(parallel::detectCores() - 1)
+# registerDoParallel(cl)
+# y al final no llamar stopCluster(cl).
+
+# Opción B — Usar future (más robusto que doParallel)
+library(future)
+library(doFuture)        # integra future con foreach/tidymodels
+
+workers <- max(1, future::availableCores() - 1)
+plan(multisession, workers = workers)   # ← casi nunca falla
+
+registerDoFuture()       # foreach usará este plan
+Con esto no necesitas makeCluster() ni tocar Rscript.exe; el plan crea procesos hijos automáticamente usando forward-slashes internamente.
+
+# Si en algún momento quieres volver al modo secuencial:
+plan(sequential)
 
 
 
 
-# 4. Semilla y cluster -----------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Semilla reproducible
 set.seed(777)
-cl <- makeCluster(parallel::detectCores() - 1)
-registerDoParallel(cl)
-
-
-
-
 
 
 ## Validacion cruzada espacial
@@ -78,29 +188,59 @@ folds_spatial <- spatialBlock(
 
 # Convertimos a vfold_cv con índices
 folds <- vfold_cv(
-  data  = train,
-  v     = length(folds_spatial$foldID),
-  repeats = 1,
-  strata  = NULL,
-  id      = as.factor(folds_spatial$foldID)
+  data = train,
+  v    = length(folds_spatial$foldID),
+  id   = as.factor(folds_spatial$foldID)
 )
 
+
+# Ajuste
+# 1. Agrega la columna foldID al data frame  ------------------------------
+train$foldID <- folds_spatial$foldID        # vector ya devuelto por spatialBlock
+
+# 2. Crea la rset con esos grupos ----------------------------------------
+folds <- group_vfold_cv(
+  data  = train,
+  group = foldID,                 # nombre de la columna recién añadida
+  v     = length(unique(train$foldID))
+)
+
+# folds es ahora un objeto <vfold_cv> válido para tune_grid()
+
+
+
+
+
+
+
+
+
+
+
 ## Receta base
-receta_1 <- recipe(price ~ srf_ttl+surf_cv+rooms+bdrms+bathrm+prp_typ+PC1+PC2+
-                     PC3+PC4+PC5+PC6+PC7+PC8+PC9+PC10+PC11+PC12+PC13+PC14+PC15+
-                     PC16+PC17+PC18+PC19+PC20+PC21+PC22+PC23+PC24+PC25+PC26+
-                     PC27+PC28+PC29+PC30+nm_prqd+estrato+dist_nv+dst_hsp+
-                     dst_rst+dist_pl+dist_sc+dst_clt+dst_dsc+dst_prq+dst_ttr+dist_br+
-                     dst_plt+dst_stc+dst_gym+dst_jrd+dst_prk+dist_jg+dst_vpr+
-                     dst_vpd+dst_cyc+dst_mll+rati_cv+bdrm_pr, data = Train) %>%
-  step_novel(all_nominal_predictors()) %>% 
-  step_dummy(all_nominal_predictors()) %>% 
-  step_interact(terms = ~ srf_ttl:matches("estrato")+dst_vpr:matches("estrato")) %>% 
+library(recipes)
+
+receta_hedonica <- recipe(
+  price ~ srf_ttl + surf_cv + rooms + bdrms + bathrm + prp_typ +
+    PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10 +
+    PC11 + PC12 + PC13 + PC14 + PC15 + PC16 + PC17 + PC18 + PC19 +
+    PC20 + PC21 + PC22 + PC23 + PC24 + PC25 + PC26 + PC27 + PC28 +
+    PC29 + PC30 + nm_prqd + estrato + dist_nv + dst_hsp + dst_rst +
+    dist_pl + dist_sc + dst_clt + dst_dsc + dst_prq + dst_ttr +
+    dst_plt + dst_stc + dst_gym + dst_jrd + dst_prk + dist_jg +
+    dst_vpr + dst_vpd + dst_cyc + dst_mll + rati_cv + bdrm_pr,
+  data = train
+) %>%
+  step_novel(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_interact(terms = ~ srf_ttl:estrato + dst_vpr:estrato) %>%  # ejemplo
   step_poly(dst_vpr, degree = 2) %>%
-  step_zv(all_predictors()) %>% 
-  step_normalize(all_predictors())
-  #step_log(price, offset = 1) |> # (opcional) estabilizar varianza
-  step_corr(all_numeric(), threshold = .9)
+  step_zv(all_predictors()) %>%
+  step_normalize(all_predictors()) %>%
+  # ── TRANSFORMACIÓN LOGARÍTMICA (opcional) ──────────────────────────────
+  # step_log(price, offset = 1) %>%      # descomenta si la quieres usar
+  # ───────────────────────────────────────────────────────────────────────
+  step_corr(all_numeric_predictors(), threshold = 0.9)
 
 
 
@@ -111,6 +251,19 @@ write_kaggle <- function(df_pred, nombre_archivo){
     write_csv(file.path(dir_out, nombre_archivo),
               na = "", append = FALSE)
 }
+
+write_kaggle <- function(df_pred, nombre_archivo){
+  df_pred %>%
+    select(property_id, price = .pred) %>%
+    readr::write_csv(file.path(dir_out, nombre_archivo), na = "")
+}
+
+
+
+
+
+
+
 
 
 #### MODELO 1 – XGBoost
