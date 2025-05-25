@@ -1,20 +1,3 @@
-require(pacman)
-p_load(
-  ggplot2,
-  tidyverse,
-  dplyr,
-  visdat,
-  sf,
-  stargazer,
-  leaflet,
-  gridExtra,
-  osmdata,
-  FNN
-)
-
-# train <- read_sf("//stores//work_jcp//Train//Train.shp")
-# test <- read_sf("//stores//work_jcp//Test//Test.shp")
-
 
 ## Preparacion
 
@@ -39,8 +22,6 @@ print(path_train)
 # Comprobar que existen
 stopifnot(file.exists(path_train), file.exists(path_test))
 
-
-
 # 2. Leer shapefiles -------------------------------------------
 library(sf)
 train_sf <- st_read(path_train, quiet = TRUE)
@@ -50,119 +31,103 @@ test_sf  <- st_read(path_test, quiet  = TRUE)
 train <- train_sf |> st_drop_geometry()
 test  <- test_sf  |> st_drop_geometry()
 
-
-
-
-
-
-
-
-
-
-#### PRUEBAAAAS
-
-## Otra solucion
-
-library(doFuture)
-plan(multisession, workers = ncores)   # crea sesiones sin problemas de \U
-registerDoFuture()
-
-# 4. Semilla y cluster -----------------------------------------------------
-set.seed(777)
-library(doParallel)           # ya trae 'parallel' de fondo
-cl <- makeCluster(parallel::detectCores() - 1)
-registerDoParallel(cl)
-
-# ‘parallelly’ busca automáticamente la mejor estrategia
-library(parallelly)
-cl <- makeClusterPSOCK(workers = availableCores() - 1)
-registerDoParallel(cl)
-
-# Lista todo lo que termine en .shp dentro de la carpeta base
-list.files("//stores/work_jcp", pattern = "\\.shp$", recursive = TRUE)
-list.files("//stores/work", pattern = "\\.shp$", recursive = TRUE)
-
-list.files("C://Users//jhanc//OneDrive - Universidad de los andes//CURSOS//2025-10 BDyML//Github//202510-MLBD-PS3//stores//work//Train", pattern = "\\.shp$")
-# Deberías ver "Train.shp" en el resultado
-
-head(path_train)
-head(path_test)
-
-## Otra solucion de clusteres
-library(parallelly)
-library(doParallel)
-
-# Núcleos disponibles menos uno
-ncores <- max(1, parallelly::availableCores() - 1)
-
-# 1. Construye la ruta a Rscript y cámbiale '\' por '/'
-rscript_path <- normalizePath(
-  file.path(R.home("bin"), "Rscript.exe"),   # <— suele devolver barras normales
-  winslash = "/", mustWork = TRUE
-)
-
-print(rscript_path)  # Debe verse algo como: C:/Program Files/R/R-4.4.0/bin/Rscript.exe
-
-# 2. Crea el clúster usando esa ruta
-cl <- parallelly::makeClusterPSOCK(
-  workers   = ncores,
-  rscript   = rscript_path,
-  setup_strategy = "sequential"   # evita llamadas paralelas al inicio
-)
-
-# 3. Registra backend foreach
-doParallel::registerDoParallel(cl)
-
-
-# Opción A — Omitir la paralelización
-# library(doParallel)
-# cl <- makeCluster(parallel::detectCores() - 1)
-# registerDoParallel(cl)
-# y al final no llamar stopCluster(cl).
-
-# Opción B — Usar future (más robusto que doParallel)
-library(future)
-library(doFuture)        # integra future con foreach/tidymodels
-
-workers <- max(1, future::availableCores() - 1)
-plan(multisession, workers = workers)   # ← casi nunca falla
-
-registerDoFuture()       # foreach usará este plan
-Con esto no necesitas makeCluster() ni tocar Rscript.exe; el plan crea procesos hijos automáticamente usando forward-slashes internamente.
-
-# Si en algún momento quieres volver al modo secuencial:
-plan(sequential)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # Semilla reproducible
 set.seed(777)
+
+
+ACÁ IRÍA EL CÓDIGO PARA LA PARALELIZACIÓN.
+TEN EN CUENTA QUE USO R EN VSCODE
+
+
+# ------------------------------------------------------------------
+# ⁂  PARALelización future + doFuture ••• SIN '\U' •••
+# ------------------------------------------------------------------
+library(future); library(doFuture)
+
+workers <- max(1L, future::availableCores() - 1L)
+
+## Ruta a Rscript con barras normales
+rscript_ok <- gsub("\\\\", "/", file.path(R.home("bin"), "Rscript.exe"))
+
+## ‼  Lanza multisession usando ESA ruta
+plan(multisession,
+     workers = workers,
+     rscript = rscript_ok,     # ← la clave está aquí
+     outfile  = ""             # mensajes de cada worker en consola
+)
+
+registerDoFuture()             # foreach / tidymodels ya ven el backend
+cat("Backend future-multisession activo con", workers, "workers\n")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##### 2. Acelerar tune_grid() con el mismo backend en cada modelo
+xgb_res <- tune_grid(
+  xgb_wf,
+  resamples = folds,
+  grid      = xgb_grid,
+  metrics   = metric_set(mae),
+  control   = control_grid(parallel_over = "everything")
+)
+
+
+
+
+
+
+#### 3. SuperLearner en paralelo (Windows compatible)
+# Extrae el clúster que future ya abrió
+cl <- future::getCluster()
+
+# Entrenamiento SuperLearner
+sl_fit <- SuperLearner(
+  Y = y_tr, X = x_tr, family = gaussian(),
+  SL.library = sl_learners,
+  method     = "method.NNLS",
+  cvControl  = list(V = length(fold_list), validRows = fold_list),
+  cluster    = cl,          # ← aquí está la magia
+  parallel   = "snow",
+  verbose    = TRUE
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ## Validacion cruzada espacial
@@ -180,14 +145,6 @@ folds_spatial <- spatialBlock(
   showBlocks  = FALSE
 )
 
-# Convertimos a vfold_cv con índices
-folds <- vfold_cv(
-  data = train,
-  v    = length(folds_spatial$foldID),
-  id   = as.factor(folds_spatial$foldID)
-)
-
-
 # Ajuste
 # 1. Agrega la columna foldID al data frame  ------------------------------
 train$foldID <- folds_spatial$foldID        # vector ya devuelto por spatialBlock
@@ -200,16 +157,6 @@ folds <- group_vfold_cv(
 )
 
 # folds es ahora un objeto <vfold_cv> válido para tune_grid()
-
-
-
-
-
-
-
-
-
-
 
 ## Receta base
 library(recipes)
@@ -251,10 +198,6 @@ write_kaggle <- function(df_pred, nombre_archivo){
     select(property_id, price = .pred) %>%
     readr::write_csv(file.path(dir_out, nombre_archivo), na = "")
 }
-
-
-
-
 
 
 
