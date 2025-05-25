@@ -23,7 +23,6 @@ require(pacman)
 p_load(
   caret,
   dplyr,
-  Metrics,
   gbm,
   sf,
   tidymodels,
@@ -71,7 +70,8 @@ receta_1 <- recipe(price ~ srf_ttl+surf_cv+rooms+bdrms+bathrm+prp_typ+PC1+PC2+
 nnet <- parsnip::mlp(
   hidden_units = 6,
   epochs = 100,
-  engine = 'nnet'
+  engine = 'nnet',
+  validation_split = 0.2
 ) %>% 
   parsnip::set_mode("regression") %>% 
   parsnip::set_engine("nnet")
@@ -88,18 +88,26 @@ work <- workflow() %>%
 grid_values <- tidyr::crossing(
   # `crossing` nos permite generar una grilla 
   # rectangular con la combinación de todos los hiperparámetros. 
-  hidden_units = seq(from= 5, to=60, by = 5),
-  epochs =  seq(from= 300, to=500, by = 100)
+  hidden_units = c(1, 3, 5, 10, 20, 40, 60, 80, 100),
+  epochs =  c(100, 300, 500, 800, 1000)
 )
 
-train_sf <- st_as_sf(
-  train,
-  # "coords" is in x/y order -- so longitude goes first!
-  coords = c("lon", "lat"),
-  # Set our coordinate reference system to EPSG:4326,
-  # the standard WGS84 geodetic coordinate reference system
-  crs = 3116
-)
+# train_sf <- st_as_sf(
+#   train,
+#   # "coords" is in x/y order -- so longitude goes first!
+#   coords = c("lon", "lat"),
+#   # Set our coordinate reference system to EPSG:4326,
+#   # the standard WGS84 geodetic coordinate reference system
+#   crs = 3116
+# )
+
+set.seed(123)
+
+block_folds <-
+  spatial_leave_location_out_cv(
+    train,
+    group = loc_nmb
+  )
 
 nnet_tune <- 
   parsnip::mlp(hidden_units =tune(), epochs = tune()) %>% 
@@ -110,14 +118,15 @@ workflow_tune <- workflow() %>%
   add_recipe(receta_1) %>%
   add_model(nnet_tune) 
 
-set.seed(86936)
-block_folds <- spatial_block_cv(train_sf, v = 5)
+# set.seed(86936)
+# block_folds <- spatial_block_cv(train_sf, v = 5)
+
 
 tune_res1 <- tune_grid(
   workflow_tune,         # El flujo de trabajo que contiene: receta y especificación del modelo
   resamples = block_folds,  # Folds de validación cruzada espacial
   grid = grid_values,        # Grilla de valores de penalización
-  metrics = metric_set(mae)  # metrica
+  metrics = metric_set(yardstick::mae)  # metrica
 )
 
 best_tune <- select_best(tune_res1, metric = "mae")
@@ -128,7 +137,7 @@ nnet_tuned_final <- finalize_workflow(workflow_tune, best_tune)
 nnet_tuned_final_fit <- fit(nnet_tuned_final, data = train)
 
 augment(nnet_tuned_final_fit, new_data = test) %>%
-  mae(truth = price, estimate = .pred)
+  yardstick::mae(truth = price, estimate = .pred)
 
 
 preds <- predict(nnet_tuned_final_fit, new_data = pred)

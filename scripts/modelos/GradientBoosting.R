@@ -105,16 +105,10 @@ test$price_hat<-predict(modelo,newdata = test)
 
 mean(abs(test$price-test$price_hat))
 
-##CORRER OTRA VEZ DESDE ACA!!!
-
 predic<-predict(modelo,newdata = pred)
 
-results <- bind_cols(pred$prprty_, results <- bind_cols(pred$prprty_, preds)
-                     
-                     colnames(results) <- c("property_id","price")
-                     
-                     write.csv(results, "stores\\sub\\nn_1_layer.csv", row.names = FALSE))
-
+results <- bind_cols(pred$prprty_, results)
+                  
 colnames(results) <- c("property_id","price")
 
 write.csv(results, "stores\\sub\\gbm.csv", row.names = FALSE)
