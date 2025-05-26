@@ -107,7 +107,7 @@ mean(abs(test$price-test$price_hat))
 
 predic<-predict(modelo,newdata = pred)
 
-results <- bind_cols(pred$prprty_, results)
+results <- bind_cols(pred$prprty_, predic)
                   
 colnames(results) <- c("property_id","price")
 
