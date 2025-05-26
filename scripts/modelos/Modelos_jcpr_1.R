@@ -72,16 +72,6 @@ cat("Backend future-multisession activo con", workers, "workers\n")
 
 
 
-
-
-
-
-
-
-
-
-
-
 ##### 2. Acelerar tune_grid() con el mismo backend en cada modelo
 xgb_res <- tune_grid(
   xgb_wf,
@@ -110,13 +100,6 @@ sl_fit <- SuperLearner(
   parallel   = "snow",
   verbose    = TRUE
 )
-
-
-
-
-
-
-
 
 
 
@@ -178,8 +161,9 @@ receta_1 <- recipe(
   step_poly(dst_vpr, degree = 2) %>%
   step_zv(all_predictors()) %>%
   step_normalize(all_predictors()) %>%
-  # ── TRANSFORMACIÓN LOGARÍTMICA (opcional) ──────────────────────────────
-  # step_log(price, offset = 1) %>%      # descomenta si la quieres usar
+
+  # ── TRANSFORMACIÓN LOGARÍTMICA (opc) ──────────────────────────────
+  # step_log(price, offset = 1) %>%   
   # ───────────────────────────────────────────────────────────────────────
   step_corr(all_numeric_predictors(), threshold = 0.9)
 

@@ -24,14 +24,14 @@ set.seed(777)
 
 
 
-## ── BACKEND future (2 workers para no saturar la RTX 4070) ────────────
+## ── BACKEND future
 workers <- 2L
 rscript_ok <- gsub("\\\\", "/", file.path(R.home("bin"), "Rscript.exe"))
 plan(multisession, workers = workers, rscript = rscript_ok, outfile = "")
 registerDoFuture()
 
 ## ─────────────────── 1. OPCIÓN A – subir límite de globals ────────────
-options(future.globals.maxSize = 4 * 1024^3)   ### ← NEW (4 GiB)
+options(future.globals.maxSize = 4 * 1024^3)   ### ← Lo fijo en este valor para no saturar memoria VRAM
 
 
 
@@ -72,7 +72,7 @@ receta_1 <- recipe(
   step_poly(dst_vpr, degree = 2) %>%
   step_zv(all_predictors()) %>%
   step_normalize(all_predictors()) %>%
-  # step_log(price, offset = 1) %>%   # descomenta si quieres log-transform
+  # step_log(price, offset = 1) %>%   # linea para incluir log-transform
   step_corr(all_numeric_predictors(), threshold = .9)
 
 
@@ -114,7 +114,7 @@ xgb_res <- tune_grid(
   resamples = folds,
   grid      = xgb_grid,
   metrics   = metric_set(mae),
-  control   = ctrl)                     ### ← usa el control ajustado
+  control   = ctrl)                   
 
 best_xgb <- select_best(xgb_res, "mae")
 xgb_fit  <- finalize_workflow(xgb_wf, best_xgb) %>% fit(train)
@@ -152,7 +152,7 @@ write_kaggle(bind_cols(test, predict(nnet_fit, test)), "pred_mlp_nnet.csv")
 
 
 ## ───────────────────── 6. BRULEE / torch (GPU) ───────────────────────
-## ─────────────── 1.  Especificación brulee SIN warnings ──────────────
+
 mlp_br_spec <- mlp(
   hidden_units = tune(),
   penalty      = tune(),
@@ -169,10 +169,8 @@ mlp_br_spec <- mlp(
 br_fit <- finalize_workflow(mlp_br_wf, best_br) %>% fit(train)
 
 ## ─────────────── 2.  Función CSV usa nombre real de ID ───────────────
-# Comprueba el nombre
 names(test) %>% head()
 
-# Supongamos que se llama 'id_propiedad'
 write_kaggle <- function(df, file_name, id_col){
   df %>%
     select({{ id_col }}, price = .pred) %>%
@@ -182,9 +180,7 @@ write_kaggle <- function(df, file_name, id_col){
 # Llamada
 write_kaggle(bind_cols(test, predict(br_fit, test)),
              "pred_mlp_brulee.csv",
-             id_col = id_propiedad)      # ← pon aquí tu columna real
-
-
+             id_col = id_propiedad)
 
 
 
@@ -194,9 +190,9 @@ br_fit  <- finalize_workflow(mlp_br_wf, best_br) %>% fit(train)
 write_kaggle(bind_cols(test, predict(br_fit, test)), "pred_mlp_brulee.csv")
 
 
-## ───────────────────── 7. KERAS / TensorFlow-GPU ──────────────────────
+
 ## ───────────────────── 7. KERAS / TensorFlow–GPU ──────────────────────
-library(dials)   # por si no estaba cargado
+library(dials)
 
 keras_build <- function(input_shape,
                         units1 = 256, units2 = 128,
@@ -271,7 +267,7 @@ y_tr <- bake(rec_prep, train, all_outcomes())$price
 fold_list <- split(seq_len(nrow(train)), folds$in_id)
 
 sl_learners <- c("SL.xgboost", "SL.glmnet", "SL.nnet", "SL.randomForest")
-cl <- future::getCluster()           # re-usa tu PSOCK
+cl <- future::getCluster()         # ← cluster para paralelizar
 
 sl_fit <- SuperLearner(
   Y = y_tr, X = x_tr, family = gaussian(),

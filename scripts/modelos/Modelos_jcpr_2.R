@@ -54,7 +54,7 @@ plan(multisession,
      outfile  = ""             # mensajes de cada worker en consola
 )
 
-registerDoFuture()             # foreach / tidymodels ya ven el backend
+registerDoFuture()             # foreach / tidymodels
 cat("Backend future-multisession activo con", workers, "workers\n")
 
 
@@ -70,15 +70,8 @@ cat("Backend future-multisession activo con", workers, "workers\n")
 
 
 
-
-
-
-
-
-
-
 # ──────────────────────────────────────────────────────────────────────
-#  VALIDACIÓN CRUZADA ESPACIAL (misma lógica, sin cambios de nombre)
+#  VALIDACIÓN CRUZADA ESPACIAL
 # ──────────────────────────────────────────────────────────────────────
 folds_spatial <- blockCV::spatialBlock(
   speciesData    = train_sf,
@@ -99,7 +92,7 @@ folds <- group_vfold_cv(
 )
 
 # ──────────────────────────────────────────────────────────────────────
-#  RECETA (idéntica, solo nombres en inglés para evitar errores)
+#  RECETA
 # ──────────────────────────────────────────────────────────────────────
 library(recipes)
 
@@ -124,7 +117,7 @@ receta_1 <- recipe(
   step_corr(all_numeric_predictors(), threshold = .9)
 
 # ──────────────────────────────────────────────────────────────────────
-#  HELPER PARA CSV KAGGLE
+#  HELPER PARA CSV
 # ──────────────────────────────────────────────────────────────────────
 write_kaggle <- function(df_pred, file_name){
   df_pred %>%
@@ -155,7 +148,7 @@ xgb_res <- tune_grid(
   resamples = folds,
   grid      = xgb_grid,
   metrics   = metric_set(mae),
-  control   = control_grid(parallel_over = "everything")   # <- usa workers
+  control   = control_grid(parallel_over = "everything")   # <- uso mis workers de GPU
 )
 
 best_xgb <- select_best(xgb_res, "mae")
@@ -284,7 +277,7 @@ pred_keras <- predict(keras_fit, test) %>% bind_cols(test)
 write_kaggle(pred_keras, "pred_keras_dnn.csv")
 
 # ──────────────────────────────────────────────────────────────────────
-#  5. SUPERLEARNER  (reutiliza los mismos workers)
+#  5. SUPERLEARNER  (reutilizo los mismos workers para mi PC)
 # ──────────────────────────────────────────────────────────────────────
 rec_prep <- prep(receta_1, training = train, verbose = FALSE)
 
@@ -306,7 +299,7 @@ sl_fit <- SuperLearner(
   method      = "method.NNLS",
   cvControl   = list(V = length(fold_list), validRows = fold_list),
   parallel    = "snow",
-  cluster     = cl,        # usa los mismos workers
+  cluster     = cl,        # uso los mismos workers
   verbose     = TRUE
 )
 
@@ -336,7 +329,7 @@ mae_tbl <- tibble(
 
 print(mae_tbl)
 
-# El MAE del SuperLearner lo tomamos del validation set interno
+# El MAE del SuperLearner lo tomo del validation set interno
 mae_sl <- sl_fit$cvRisk   # promedio CV interno
 cat("SuperLearner MAE (CV interno):", round(mae_sl, 2), "\n")
 
@@ -353,6 +346,6 @@ if (mae_sl < mae_tbl$mae[1]) {
   cat("► SuperLearner NO supera al mejor individual.\n")
 }
 
-# Si deseas terminar la sesión paralela:
-# plan(sequential)
+
+# plan(sequential) # para terminar la sesión paralela
 
