@@ -274,7 +274,7 @@ sl_fit <- SuperLearner(
   SL.library = sl_learners,
   method     = "method.NNLS",
   cvControl  = list(V = length(fold_list), validRows = fold_list),
-  parallel   = "snow"",
+  parallel   = "snow",
   cluster    = cl,
   verbose    = TRUE
 )

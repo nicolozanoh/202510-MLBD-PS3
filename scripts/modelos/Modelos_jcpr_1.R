@@ -35,9 +35,6 @@ test  <- test_sf  |> st_drop_geometry()
 set.seed(777)
 
 
-ACÁ IRÍA EL CÓDIGO PARA LA PARALELIZACIÓN.
-TEN EN CUENTA QUE USO R EN VSCODE
-
 
 # ------------------------------------------------------------------
 # ⁂  PARALelización future + doFuture ••• SIN '\U' •••
