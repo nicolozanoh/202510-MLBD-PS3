@@ -37,6 +37,11 @@ library(dplyr)
 nuevas_vars_train <- setdiff(names(data_texto_train), names(Train))
 nuevas_vars_test  <- setdiff(names(data_texto_test), names(Test))
 
+View(Train)
+View(data_texto_train)
+
+View(Test)
+View(data_texto_test)
 
 # 2. Unir solo las variables que no están repetidas
 Train_completo <- Train %>%
@@ -727,3 +732,664 @@ st_write(Train_localizado, "stores\\work\\Train\\Train.shp")
 #para el testing set:
 st_write(Test_localizado, "stores\\work\\Test\\Test.shp")
 
+
+
+############################################################################################
+############################################################################################
+############################################################################################
+############################################################################################
+############################################################################################
+
+
+## RUTAS
+"stores/work_jcp/Datasets/0/train.csv"
+"stores/work_jcp/Datasets/0/test.csv"
+
+"stores/work_jcp/Datasets/1/Train/Train.shp"
+"stores/work_jcp/Datasets/1/Test/Test.shp"
+
+"stores/work_jcp/Datasets/1/Train/Train_localizado.shp"
+"stores/work_jcp/Datasets/1/Test/Test_localizado.shp"
+
+
+#======================================================================
+#  ANALÍTICA BÁSICA DE LOS CSV ORIGINALES
+#  ▸ Compara esquemas   (Train.csv vs Test.csv)
+#  ▸ Tabla de descriptivos por variable (x2)
+#  ▸ Resumen global de cada dataset     (x2)
+#  ▸ Exporta   ▸ CSV   ▸ PNG   para insertar en LaTeX
+#----------------------------------------------------------------------
+#  Ejecutar en VS Code — requiere PhantomJS o Chrome para webshot2
+#======================================================================
+
+# 0. Paquetes ----------------------------------------------------------
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+pacman::p_load(
+  readr, dplyr, purrr, tibble, tidyr,
+  skimr,                         # descriptivos
+  gt, webshot2,                  # tablas → PNG
+  janitor, stringr
+)
+
+# 1. Rutas -------------------------------------------------------------
+csv_train <- "stores/work_jcp/Datasets/0/train.csv"
+csv_test  <- "stores/work_jcp/Datasets/0/test.csv"
+
+# 2. Lectura -----------------------------------------------------------
+train <- read_csv(csv_train, show_col_types = FALSE)
+test  <- read_csv(csv_test, show_col_types = FALSE)
+
+out_dir <- "stores/work_jcp/metadata_csv"
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+#======================================================================
+#  Comparación de variables (nombres y tipos) -----------------------
+#======================================================================
+
+v_train   <- names(train)
+v_test    <- names(test)
+solo_tr   <- setdiff(v_train, v_test)
+solo_te   <- setdiff(v_test , v_train)
+comunes   <- intersect(v_train, v_test)
+
+# ---- tipos en las columnas comunes ----
+tipo_tbl <- tibble(
+  variable   = comunes,
+  train_type = map_chr(comunes, ~ paste(class(train[[.x]])[1])),
+  test_type  = map_chr(comunes, ~ paste(class(test [[.x]])[1])),
+  iguales    = train_type == test_type
+)
+
+# guardar resultado
+write_csv(tipo_tbl, file.path(out_dir, "schema_comparison.csv"))
+
+
+
+
+#----------------------------------------------------------
+#  Función helper: gtsave_png()  – ajusta el alto dinámico
+#----------------------------------------------------------
+gtsave_png <- function(gt_tbl, file_png, n_rows, base_height = 120,
+                       row_height = 20, zoom = 2){
+  # vheight = base + filas × alto_fila   (px)
+  vheight <- base_height + n_rows * row_height
+  
+  gt::gtsave(
+    data = gt_tbl,
+    filename = file_png,
+    vheight  = vheight,   # alto del viewport
+    zoom     = zoom,      # mejora la resolución (2 = 200 %)
+    expand   = 5          # agrega margen para que no corte bordes
+  )
+}
+
+
+
+
+
+
+#----------------------------------------------------------
+#  A) Descriptivos por variable  (Train / Test)
+#----------------------------------------------------------
+crear_desc <- function(df, nombre){
+  desc <- skimr::skim_without_charts(df)
+  write_csv(desc, file.path(out_dir, paste0("desc_", nombre, ".csv")))
+  
+  png_file <- file.path(out_dir, paste0("desc_", nombre, ".png"))
+  n_rows   <- nrow(desc)
+  
+  gt_tbl <- desc %>%
+    gt::gt(rowname_col = "skim_variable") %>%
+    gt::tab_header(title = paste("Descriptivos —", str_to_title(nombre))) %>%
+    gt::opt_table_font(size = 9)                # letra más compacta
+  
+  gtsave_png(gt_tbl, png_file, n_rows)
+  invisible(desc)
+}
+
+desc_train <- crear_desc(train, "train")
+desc_test  <- crear_desc(test , "test" )
+
+
+
+#----------------------------------------------------------
+#  B) Resumen global  (apenas 2 filas, pero se aplica igual)
+#----------------------------------------------------------
+sum_png <- file.path(out_dir, "summary_datasets.png")
+
+gt_sum <- sum_tbl %>%
+  gt() %>%
+  gt::tab_header(title = "Resumen global de los CSV originales") %>%
+  gt::fmt_number(columns = perc_missing, decimals = 2, suffixing = "%")
+
+gtsave_png(gt_sum, sum_png, n_rows = nrow(sum_tbl), base_height = 80)
+
+
+
+
+
+
+
+#======================================================================
+#  C. Resumen global de cada CSV --------------------------------------
+#======================================================================
+
+resumen <- function(df, nombre){
+  tibble(
+    dataset      = str_to_title(nombre),
+    n_obs        = nrow(df),
+    n_vars       = ncol(df),
+    perc_missing = round(mean(is.na(df))*100, 2),
+    n_numeric    = sum(map_lgl(df, is.numeric)),
+    n_character  = sum(map_lgl(df, is.character)),
+    obj_size_MB  = format(object.size(df), units = "MB")
+  )
+}
+
+sum_tbl <- bind_rows(
+  resumen(train, "train"),
+  resumen(test , "test")
+)
+
+write_csv(sum_tbl, file.path(out_dir, "summary_datasets.csv"))
+
+# tabla bonita PNG
+sum_png <- file.path(out_dir, "summary_datasets.png")
+sum_tbl %>%
+  gt() %>%
+  gt::tab_header(title = "Resumen global de los CSV originales") %>%
+  gt::fmt_number(columns = perc_missing, decimals = 2, suffixing = "%") %>%
+  gt::gtsave(sum_png)
+
+#======================================================================
+#  D. Mensaje final ----------------------------------------------------
+#======================================================================
+cat("\n► Resultados guardados en:", normalizePath(out_dir), "\n")
+cat("  - schema_comparison.csv",
+    "\n  - desc_train.csv / desc_test.csv + PNG",
+    "\n  - summary_datasets.csv  + PNG\n")
+
+# OPTIONAL: imprime las discrepancias en consola ----------------------
+if (length(solo_tr) > 0 | length(solo_te) > 0) {
+  cat("\n✘ Variables exclusivas de TRAIN (", length(solo_tr), "):\n", sep = "")
+  print(solo_tr, quote = FALSE)
+  cat("\n✘ Variables exclusivas de TEST  (", length(solo_te), "):\n", sep = "")
+  print(solo_te, quote = FALSE)
+} else {
+  cat("\n✔ Ambos CSV contienen el mismo conjunto de columnas.\n")
+}
+
+if (!all(tipo_tbl$iguales)) {
+  cat("\n⚠ Columnas con tipo distinto:\n")
+  print(filter(tipo_tbl, !iguales), n = Inf)
+} else {
+  cat("\n✔ Los tipos de dato coinciden para todas las columnas comunes.\n")
+}
+
+
+
+
+
+
+
+### OTRA VERSION PARA CONSIDERAR EL TAMAÑO DE LA TABLA EN PNG
+#################################################################
+
+#======================================================================
+#  Funciones para (i) reducir alto por fila   y/o
+#                     (ii) dividir la tabla en NUMERIC vs NO-NUMERIC
+#======================================================================
+
+# A.  gtsave_png():  captura GT → PNG con alto dinámico ----------------
+gtsave_png <- function(gt_tbl, file_png,
+                       n_rows,
+                       base_height = 100,   # cabecera
+                       row_height  = 18,    # px por fila  (⇐ ajústalo aquí)
+                       zoom        = 2,
+                       expand      = 5) {
+  vheight <- base_height + n_rows * row_height
+  gt::gtsave(data = gt_tbl, filename = file_png,
+             vheight = vheight, zoom = zoom, expand = expand)
+}
+
+# B.  crear_desc_split():  divide en num / no-num si la tabla es grande
+#     • Si n_rows > umbral → genera dos tablas y PNGs
+#     • Caso contrario → genera una sola (igual que antes)
+#----------------------------------------------------------------------
+crear_desc_split <- function(df, nombre, umbral = 45,
+                             row_height = 18) {
+  
+  desc <- skimr::skim_without_charts(df)
+  
+  # --- si la tabla es pequeña, se guarda entera ---
+  if (nrow(desc) <= umbral) {
+    png_file <- file.path(out_dir, sprintf("desc_%s.png", nombre))
+    
+    gtsave_png(
+      gt_tbl   = gt::gt(desc, rowname_col = "skim_variable") %>%
+                 gt::tab_header(title = paste("Descriptivos —", str_to_title(nombre))) %>%
+                 gt::opt_table_font(size = 9),
+      file_png = png_file,
+      n_rows   = nrow(desc),
+      row_height = row_height
+    )
+    write_csv(desc, file.path(out_dir, sprintf("desc_%s.csv", nombre)))
+    return(invisible(list(full = desc)))
+  }
+  
+  # --- tabla grande: separar numeric vs resto ------------------------
+  desc_num  <- dplyr::filter(desc, skim_type == "numeric")
+  desc_otros<- dplyr::filter(desc, skim_type != "numeric")
+  
+  # --- helper interno para guardar cada parte -----------------------
+  save_part <- function(tbl, sufijo){
+    png_file <- file.path(out_dir, sprintf("desc_%s_%s.png", nombre, sufijo))
+    csv_file <- file.path(out_dir, sprintf("desc_%s_%s.csv", nombre, sufijo))
+    
+    gtsave_png(
+      gt_tbl   = gt::gt(tbl, rowname_col = "skim_variable") %>%
+                 gt::tab_header(title = paste("Descriptivos —", str_to_title(nombre), sufijo)) %>%
+                 gt::opt_table_font(size = 9),
+      file_png = png_file,
+      n_rows   = nrow(tbl),
+      row_height = row_height
+    )
+    write_csv(tbl, csv_file)
+  }
+  
+  save_part(desc_num , "numeric")
+  save_part(desc_otros, "otros")
+  
+  invisible(list(numeric = desc_num, otros = desc_otros))
+}
+
+#======================================================================
+#  USO con Train / Test  (ajusta 'row_height' si lo quieres más compacto)
+#======================================================================
+
+desc_train <- crear_desc_split(train, "train", umbral = 45, row_height = 16)
+desc_test  <- crear_desc_split(test , "test",  umbral = 45, row_height = 16)
+
+
+
+
+
+
+
+
+
+
+
+
+
+##############################################################
+### VERSION QUE EVALUA FILAS Y COLUMNAS MULTIPLES
+##############################################################
+
+
+#======================================================================
+#  Diccionario en bloques cuando el nº de variables es muy grande
+#======================================================================
+
+pacman::p_load(readr, dplyr, tibble, skimr, gt, webshot2, stringr)
+
+out_dir <- "stores/work_jcp/metadata_csv"
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+# --- helper para escoger columnas clave segun tipo -------------------
+skim_reducido <- function(df){
+  skimr::skim_without_charts(df) %>%             # tabla larga
+    # numeric.*  | character.*  | Date.* | etc.
+    select(
+      skim_variable, skim_type, n_missing,
+      tidyselect::matches("(numeric|character)\\.(mean|sd|p0|p50|p100)$"),
+      tidyselect::matches("character\\.n_unique$")
+    )
+}
+
+# --- divide en chunks de N filas -------------------------------------
+partir_en_bloques <- function(tbl, chunk_size = 40){
+  split(tbl, ceiling(seq_len(nrow(tbl)) / chunk_size))
+}
+
+# --- guarda CSV + PNG para cada bloque --------------------------------
+guardar_bloque <- function(tbl, nombre, idx, row_height = 18){
+  
+  sufijo   <- sprintf("%02d", idx)          # 01, 02, …
+  basefile <- paste0("dict_", nombre, "_", sufijo)
+  
+  csv_file <- file.path(out_dir, paste0(basefile, ".csv"))
+  png_file <- file.path(out_dir, paste0(basefile, ".png"))
+  
+  write_csv(tbl, csv_file)
+  
+  n_rows <- nrow(tbl)
+  vheight <- 90 + n_rows * row_height       # alto dinámico
+  
+  gt(tbl, rowname_col = "skim_variable") %>%
+    tab_header(title = paste("Descriptivos —", str_to_title(nombre),
+                             "(bloque", sufijo, ")")) %>%
+    opt_table_font(size = 8) %>%            # letra compacta
+    gtsave(png_file, vheight = vheight, zoom = 2, expand = 5)
+}
+
+# ======================================================================
+#  FUNCIÓN PRINCIPAL  ---------------------------------------------------
+# ======================================================================
+crear_diccionario_bloques <- function(df, nombre,
+                                      chunk_size = 40,
+                                      row_height = 18) {
+  
+  dict <- skim_reducido(df)                   # tabla slim
+  bloques <- partir_en_bloques(dict, chunk_size)
+  
+  # usamos map2(): .x = bloque, .y = índice 1..N  ---------------------
+  purrr::map2(
+    bloques,
+    seq_along(bloques),                      # ← índice numérico
+    ~ guardar_bloque(.x, nombre, .y, row_height)
+  )
+  
+  invisible(dict)
+}
+
+# --------------------  USO  -------------------------------------------
+train <- readr::read_csv("stores/work_jcp/Datasets/0/train.csv",
+                         show_col_types = FALSE)
+test  <- readr::read_csv("stores/work_jcp/Datasets/0/test.csv",
+                         show_col_types = FALSE)
+
+crear_diccionario_bloques(train, "train", chunk_size = 40, row_height = 16)
+crear_diccionario_bloques(test , "test",  chunk_size = 40, row_height = 16)
+
+cat(
+  "\n✔ PNG y CSV generados en:",
+  normalizePath(out_dir),
+  "\n  - dict_train_01.png / .csv,  dict_train_02.png, …",
+  "\n  - dict_test_01.png  / .csv,  dict_test_02.png, …\n"
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ================================================================
+#  Listado definitivo de variables en las bases ya pre-procesadas
+#  (Train_localizado y Test_localizado) – script para VS Code
+# ================================================================
+
+# 1.  Librerías ----------------------------------------------------
+pacman::p_load(sf, dplyr, readr, tibble, janitor)
+
+# 2.  Rutas a los shapefiles finales ------------------------------
+path_train <- "stores/work/Train/Train.shp"
+path_test  <- "stores/work/Test/Test.shp"
+
+# 3.  Lectura (silenciosa) y eliminación de la geometría ----------
+train_sf <- st_read(path_train, quiet = TRUE)
+test_sf  <- st_read(path_test , quiet = TRUE)
+
+train_tbl <- st_drop_geometry(train_sf)
+test_tbl  <- st_drop_geometry(test_sf)
+
+# 4.  Tabla con variable + tipo de dato ---------------------------
+var_train <- tibble(
+  variable = names(train_tbl),
+  tipo     = sapply(train_tbl, function(x) paste(class(x), collapse = "/"))
+)
+
+var_test <- tibble(
+  variable = names(test_tbl),
+  tipo     = sapply(test_tbl, function(x) paste(class(x), collapse = "/"))
+)
+
+# 5.  Limpieza de nombres (opcional) ------------------------------
+var_train <- var_train %>% clean_names()
+var_test  <- var_test  %>% clean_names()
+
+# 6.  Resultados en consola ---------------------------------------
+cat("\n► Variables en TRAIN (", nrow(var_train), "):\n", sep = "")
+print(var_train, n = Inf)
+
+cat("\n► Variables en TEST (",  nrow(var_test), "):\n", sep = "")
+print(var_test,  n = Inf)
+
+# 7.  Exportar a CSV (por si se requiere en LaTeX) -----------------
+dir.create("/stores/work_jcp/metadata", showWarnings = FALSE, recursive = TRUE)
+
+write_csv(var_train, "/stores/work_jcp/metadata/variables_train.csv")
+write_csv(var_test,  "/stores/work_jcp/metadata/variables_test.csv")
+
+
+
+
+
+
+
+# ================================================================
+#  Verificar que TRAIN.shp y TEST.shp contengan las mismas variables
+# ================================================================
+#  • Lee ambos shapefiles
+#  • Compara nombre y tipo de dato por columna
+#  • Reporta diferencias (si las hay)
+#  Uso: ejecutar en VS Code con la carpeta 'stores/work' ya creada
+# ================================================================
+
+pacman::p_load(sf, dplyr, purrr, tibble)
+
+# 1.  Rutas --------------------------------------------------------
+shp_train <- "stores/work/Train/Train.shp"
+shp_test  <- "stores/work/Test/Test.shp"
+
+# 2.  Lectura silenciosa y sin geometría --------------------------
+train <- st_read(shp_train, quiet = TRUE) %>% st_drop_geometry()
+test  <- st_read(shp_test, quiet = TRUE) %>% st_drop_geometry()
+
+# 3.  Conjuntos de nombres ---------------------------------------
+v_train <- names(train)
+v_test  <- names(test)
+
+# 4.  Diferencias de nombres -------------------------------------
+solo_en_train <- setdiff(v_train, v_test)
+solo_en_test  <- setdiff(v_test , v_train)
+comunes       <- intersect(v_train, v_test)
+
+cat("\n──────── Comparación de nombres ────────\n")
+cat("Total TRAIN:", length(v_train), " —  Total TEST:", length(v_test), "\n")
+
+if (length(solo_en_train) == 0 && length(solo_en_test) == 0) {
+  cat("✔ Las dos bases tienen exactamente las mismas columnas.\n")
+} else {
+  cat("⚠ Columnas SOLO en TRAIN (", length(solo_en_train), "):\n", sep = "")
+  print(solo_en_train, quote = FALSE)
+  cat("\n⚠ Columnas SOLO en TEST  (", length(solo_en_test), "):\n", sep = "")
+  print(solo_en_test , quote = FALSE)
+}
+
+# 5.  Concordancia de tipos para columnas comunes -----------------
+tipo_tbl <- tibble(
+  variable = comunes,
+  train_type = map_chr(comunes, ~ paste(class(train[[.x]]), collapse = "/")),
+  test_type  = map_chr(comunes, ~ paste(class(test [[.x]]), collapse = "/"))
+) %>%
+  mutate(iguales = train_type == test_type)
+
+cat("\n──────── Concordancia de tipos ────────\n")
+if (all(tipo_tbl$iguales)) {
+  cat("✔ Todos los tipos de dato coinciden entre TRAIN y TEST.\n")
+} else {
+  cat("⚠ Columnas con tipos distintos:\n")
+  print(filter(tipo_tbl, !iguales), n = Inf)
+}
+
+# 6.  Resultado lógico (útil en scripts) --------------------------
+mismos_nombres <- length(solo_en_train) == 0 && length(solo_en_test) == 0
+mismos_tipos   <- all(tipo_tbl$iguales)
+
+identico_esquema <- mismos_nombres && mismos_tipos
+cat("\n► Identidad completa de esquema:", identico_esquema, "\n")
+
+
+
+
+
+
+
+
+
+
+
+
+#======================================================================
+#  Descriptivos detallados y resumen global de TRAIN.shp / TEST.shp
+#  ▸ genera:  CSV + imagen (.png) de cada tabla (para insertar en LaTeX)
+#  ▸ pensado para ejecutarse en VS Code (Windows/Mac/Linux)
+#======================================================================
+
+# 0. Paquetes ----------------------------------------------------------
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+pacman::p_load(
+  sf, dplyr, purrr, readr, tidyr,
+  skimr,                      # estadísticos descriptivos
+  gt, webshot2,               # tablas bonitas + exportar a PNG
+  janitor, stringr
+)
+
+# 1. Rutas a los shapefiles finales -----------------------------------
+shp_train <- "stores/work_jcp/Datasets/1/Train/Train_localizado.shp"
+shp_test  <- "stores/work_jcp/Datasets/1/Test/Test_localizado.shp"
+
+# 2. Lectura (sin geometría) ------------------------------------------
+train <- st_read(shp_train, quiet = TRUE) %>% st_drop_geometry()
+test  <- st_read(shp_test , quiet = TRUE) %>% st_drop_geometry()
+
+# carpeta de salida
+out_dir <- "stores/work_jcp/metadata"
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+#======================================================================
+#  (1)  Estadísticos descriptivos completos  --------------------------
+#======================================================================
+
+crear_desc <- function(df, nombre){
+  
+  # --- skimr: sin histograma spark, compacta ---
+  desc_tbl <- skimr::skim_without_charts(df) %>%
+    select(-starts_with("complete"))  # tabla más compacta
+  
+  # --- guardar CSV ---
+  write_csv(desc_tbl, file.path(out_dir, paste0("desc_localizado", nombre, ".csv")))
+  
+  # --- convertir a tabla gt y exportar PNG ---
+  desc_png <- file.path(out_dir, paste0("desc_localizado", nombre, ".png"))
+  desc_tbl %>%
+    gt::gt(rowname_col = "skim_variable") %>%
+    gt::tab_header(title = paste("Estadísticos descriptivos —", str_to_title(nombre))) %>%
+    gt::gtsave(desc_png)
+  
+  invisible(desc_tbl)
+}
+
+desc_train <- crear_desc(train, "train")
+desc_test  <- crear_desc(test , "test" )
+
+#======================================================================
+#  (2)  Resumen global de cada dataset  -------------------------------
+#======================================================================
+
+extraer_resumen <- function(df, nombre){
+  tibble(
+    dataset       = str_to_title(nombre),
+    n_observ      = nrow(df),
+    n_variables   = ncol(df),
+    perc_missing  = round(mean(is.na(df))*100, 2),
+    n_numeric     = sum(map_lgl(df, is.numeric)),
+    n_factor      = sum(map_lgl(df, is.factor)),
+    obj_size_MB   = format(object.size(df), units = "MB")
+  )
+}
+
+summary_tbl <- bind_rows(
+  extraer_resumen(train, "train"),
+  extraer_resumen(test , "test")
+)
+
+# --- guardar CSV y PNG ---
+write_csv(summary_tbl, file.path(out_dir, "summary_datasets_localizado.csv"))
+
+summary_png <- file.path(out_dir, "summary_datasets_localizado.png")
+summary_tbl %>%
+  gt() %>%
+  gt::tab_header(title = "Resumen global de los conjuntos de datos") %>%
+  gt::fmt_number(columns = perc_missing, decimals = 2, suffixing = "%") %>%
+  gt::gtsave(summary_png)
+
+#======================================================================
+message("Tablas generadas en: ", normalizePath(out_dir))

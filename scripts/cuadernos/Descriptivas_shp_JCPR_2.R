@@ -37,6 +37,11 @@ library(dplyr)
 nuevas_vars_train <- setdiff(names(data_texto_train), names(Train))
 nuevas_vars_test  <- setdiff(names(data_texto_test), names(Test))
 
+View(Train)
+View(data_texto_train)
+
+View(Test)
+View(data_texto_test)
 
 # 2. Unir solo las variables que no están repetidas
 Train_completo <- Train %>%
@@ -727,3 +732,239 @@ st_write(Train_localizado, "stores\\work\\Train\\Train.shp")
 #para el testing set:
 st_write(Test_localizado, "stores\\work\\Test\\Test.shp")
 
+
+
+############################################################################################
+############################################################################################
+############################################################################################
+############################################################################################
+############################################################################################
+
+
+## RUTAS
+"stores/work_jcp/Datasets/0/train.csv"
+"stores/work_jcp/Datasets/0/test.csv"
+
+"stores/work_jcp/Datasets/1/Train/Train.shp"
+"stores/work_jcp/Datasets/1/Test/Test.shp"
+
+"stores/work_jcp/Datasets/1/Train/Train_localizado.shp"
+"stores/work_jcp/Datasets/1/Test/Test_localizado.shp"
+
+
+
+
+
+# ================================================================
+#  Listado definitivo de variables en las bases ya pre-procesadas
+#  (Train_localizado y Test_localizado) – script para VS Code
+# ================================================================
+
+# 1.  Librerías ----------------------------------------------------
+pacman::p_load(sf, dplyr, readr, tibble, janitor)
+
+# 2.  Rutas a los shapefiles finales ------------------------------
+path_train <- "stores/work/Train/Train.shp"
+path_test  <- "stores/work/Test/Test.shp"
+
+# 3.  Lectura (silenciosa) y eliminación de la geometría ----------
+train_sf <- st_read(path_train, quiet = TRUE)
+test_sf  <- st_read(path_test , quiet = TRUE)
+
+train_tbl <- st_drop_geometry(train_sf)
+test_tbl  <- st_drop_geometry(test_sf)
+
+# 4.  Tabla con variable + tipo de dato ---------------------------
+var_train <- tibble(
+  variable = names(train_tbl),
+  tipo     = sapply(train_tbl, function(x) paste(class(x), collapse = "/"))
+)
+
+var_test <- tibble(
+  variable = names(test_tbl),
+  tipo     = sapply(test_tbl, function(x) paste(class(x), collapse = "/"))
+)
+
+# 5.  Limpieza de nombres (opcional) ------------------------------
+var_train <- var_train %>% clean_names()
+var_test  <- var_test  %>% clean_names()
+
+# 6.  Resultados en consola ---------------------------------------
+cat("\n► Variables en TRAIN (", nrow(var_train), "):\n", sep = "")
+print(var_train, n = Inf)
+
+cat("\n► Variables en TEST (",  nrow(var_test), "):\n", sep = "")
+print(var_test,  n = Inf)
+
+# 7.  Exportar a CSV (por si se requiere en LaTeX) -----------------
+dir.create("/stores/work_jcp/metadata", showWarnings = FALSE, recursive = TRUE)
+
+write_csv(var_train, "/stores/work_jcp/metadata/variables_train.csv")
+write_csv(var_test,  "/stores/work_jcp/metadata/variables_test.csv")
+
+
+
+
+
+
+
+# ================================================================
+#  Verificar que TRAIN.shp y TEST.shp contengan las mismas variables
+# ================================================================
+#  • Lee ambos shapefiles
+#  • Compara nombre y tipo de dato por columna
+#  • Reporta diferencias (si las hay)
+#  Uso: ejecutar en VS Code con la carpeta 'stores/work' ya creada
+# ================================================================
+
+pacman::p_load(sf, dplyr, purrr, tibble)
+
+# 1.  Rutas --------------------------------------------------------
+shp_train <- "stores/work/Train/Train.shp"
+shp_test  <- "stores/work/Test/Test.shp"
+
+# 2.  Lectura silenciosa y sin geometría --------------------------
+train <- st_read(shp_train, quiet = TRUE) %>% st_drop_geometry()
+test  <- st_read(shp_test, quiet = TRUE) %>% st_drop_geometry()
+
+# 3.  Conjuntos de nombres ---------------------------------------
+v_train <- names(train)
+v_test  <- names(test)
+
+# 4.  Diferencias de nombres -------------------------------------
+solo_en_train <- setdiff(v_train, v_test)
+solo_en_test  <- setdiff(v_test , v_train)
+comunes       <- intersect(v_train, v_test)
+
+cat("\n──────── Comparación de nombres ────────\n")
+cat("Total TRAIN:", length(v_train), " —  Total TEST:", length(v_test), "\n")
+
+if (length(solo_en_train) == 0 && length(solo_en_test) == 0) {
+  cat("✔ Las dos bases tienen exactamente las mismas columnas.\n")
+} else {
+  cat("⚠ Columnas SOLO en TRAIN (", length(solo_en_train), "):\n", sep = "")
+  print(solo_en_train, quote = FALSE)
+  cat("\n⚠ Columnas SOLO en TEST  (", length(solo_en_test), "):\n", sep = "")
+  print(solo_en_test , quote = FALSE)
+}
+
+# 5.  Concordancia de tipos para columnas comunes -----------------
+tipo_tbl <- tibble(
+  variable = comunes,
+  train_type = map_chr(comunes, ~ paste(class(train[[.x]]), collapse = "/")),
+  test_type  = map_chr(comunes, ~ paste(class(test [[.x]]), collapse = "/"))
+) %>%
+  mutate(iguales = train_type == test_type)
+
+cat("\n──────── Concordancia de tipos ────────\n")
+if (all(tipo_tbl$iguales)) {
+  cat("✔ Todos los tipos de dato coinciden entre TRAIN y TEST.\n")
+} else {
+  cat("⚠ Columnas con tipos distintos:\n")
+  print(filter(tipo_tbl, !iguales), n = Inf)
+}
+
+# 6.  Resultado lógico (útil en scripts) --------------------------
+mismos_nombres <- length(solo_en_train) == 0 && length(solo_en_test) == 0
+mismos_tipos   <- all(tipo_tbl$iguales)
+
+identico_esquema <- mismos_nombres && mismos_tipos
+cat("\n► Identidad completa de esquema:", identico_esquema, "\n")
+
+
+
+
+
+
+
+
+
+
+
+
+#======================================================================
+#  Descriptivos detallados y resumen global de TRAIN.shp / TEST.shp
+#  ▸ genera:  CSV + imagen (.png) de cada tabla (para insertar en LaTeX)
+#  ▸ pensado para ejecutarse en VS Code (Windows/Mac/Linux)
+#======================================================================
+
+# 0. Paquetes ----------------------------------------------------------
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+pacman::p_load(
+  sf, dplyr, purrr, readr, tidyr,
+  skimr,                      # estadísticos descriptivos
+  gt, webshot2,               # tablas bonitas + exportar a PNG
+  janitor, stringr
+)
+
+# 1. Rutas a los shapefiles finales -----------------------------------
+shp_train <- "stores/work_jcp/Datasets/1/Train/Train_localizado.shp"
+shp_test  <- "stores/work_jcp/Datasets/1/Test/Test_localizado.shp"
+
+# 2. Lectura (sin geometría) ------------------------------------------
+train <- st_read(shp_train, quiet = TRUE) %>% st_drop_geometry()
+test  <- st_read(shp_test , quiet = TRUE) %>% st_drop_geometry()
+
+# carpeta de salida
+out_dir <- "stores/work_jcp/metadata"
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+#======================================================================
+#  (1)  Estadísticos descriptivos completos  --------------------------
+#======================================================================
+
+crear_desc <- function(df, nombre){
+  
+  # --- skimr: sin histograma spark, compacta ---
+  desc_tbl <- skimr::skim_without_charts(df) %>%
+    select(-starts_with("complete"))  # tabla más compacta
+  
+  # --- guardar CSV ---
+  write_csv(desc_tbl, file.path(out_dir, paste0("desc_localizado", nombre, ".csv")))
+  
+  # --- convertir a tabla gt y exportar PNG ---
+  desc_png <- file.path(out_dir, paste0("desc_localizado", nombre, ".png"))
+  desc_tbl %>%
+    gt::gt(rowname_col = "skim_variable") %>%
+    gt::tab_header(title = paste("Estadísticos descriptivos —", str_to_title(nombre))) %>%
+    gt::gtsave(desc_png)
+  
+  invisible(desc_tbl)
+}
+
+desc_train <- crear_desc(train, "train")
+desc_test  <- crear_desc(test , "test" )
+
+#======================================================================
+#  (2)  Resumen global de cada dataset  -------------------------------
+#======================================================================
+
+extraer_resumen <- function(df, nombre){
+  tibble(
+    dataset       = str_to_title(nombre),
+    n_observ      = nrow(df),
+    n_variables   = ncol(df),
+    perc_missing  = round(mean(is.na(df))*100, 2),
+    n_numeric     = sum(map_lgl(df, is.numeric)),
+    n_factor      = sum(map_lgl(df, is.factor)),
+    obj_size_MB   = format(object.size(df), units = "MB")
+  )
+}
+
+summary_tbl <- bind_rows(
+  extraer_resumen(train, "train"),
+  extraer_resumen(test , "test")
+)
+
+# --- guardar CSV y PNG ---
+write_csv(summary_tbl, file.path(out_dir, "summary_datasets_localizado.csv"))
+
+summary_png <- file.path(out_dir, "summary_datasets_localizado.png")
+summary_tbl %>%
+  gt() %>%
+  gt::tab_header(title = "Resumen global de los conjuntos de datos") %>%
+  gt::fmt_number(columns = perc_missing, decimals = 2, suffixing = "%") %>%
+  gt::gtsave(summary_png)
+
+#======================================================================
+message("Tablas generadas en: ", normalizePath(out_dir))
