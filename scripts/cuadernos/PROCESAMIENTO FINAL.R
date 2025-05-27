@@ -175,6 +175,23 @@ Graph_2 <- Train_completo %>%
 
 grid.arrange(Graph_1, Graph_2, ncol = 2)
 
+
+
+library(fs)          # para crear carpetas
+out_dir_1 <- "stores/work_jcp/metadata_descriptivas"
+dir_create(out_dir_1)                       # crea la ruta si no existe
+plot_comb <- arrangeGrob(Graph_1, Graph_2, ncol = 2)  # un solo grob
+
+ggsave(
+  filename = file.path(out_dir_1, "boxplot_preco_mt2.png"),
+  plot     = plot_comb,
+  width    = 10,        # pulgadas; ajusta a tu gusto
+  height   = 5,
+  dpi      = 300
+)
+
+
+
 Train_completo <- Train_completo %>% filter(between(precio_por_mt2, perc1, up))
 
 # Validación espacial
@@ -718,6 +735,8 @@ sin_cod_man_TEST$cod_man  <- cod_man_imputado_Test
 Train_localizado <- bind_rows(con_cod_man, sin_cod_man)
 Test_localizado <- bind_rows(con_cod_man_TEST, sin_cod_man_TEST)
 
+View(Train_localizado)
+View(Test_localizado)
 
 
 # Guardamos en un archivo shapefield:
