@@ -10,7 +10,7 @@ clase de Machine learning y big data para economía aplicada.
 ## Estructura
 
 - scripts: Contiene todos los codigos de R con el proprocesamiento de datos geográficos, textuales y de los modelos implementados. 
-  - La carpeta "Preprocesamiento de datos" junto con el script "01_Organizar_Datos_Crear_Funciones.R" debe correrse primero. Aqui se hace pre-procesamiento de los datos, se cargan los paquetes y se crean funciones que se utilizan en los modelos.
+  - La carpeta "Preprocesamiento de datos" junto con el script "Preprocesamiento de datos completos.R" debe correrse primero. Aqui se hace pre-procesamiento de los datos, se cargan los paquetes y se crean funciones que se utilizan en los modelos.
   - Modelos_Esperimentacion: Contiene modelos de prueba.
   - Modelos_Principales: Contiene los modelos con los mejores resultados (F-Score más alto) en Kaggle.
 - stores: Aquí seguardan los datos.
