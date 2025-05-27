@@ -751,220 +751,269 @@ st_write(Test_localizado, "stores\\work\\Test\\Test.shp")
 "stores/work_jcp/Datasets/1/Train/Train_localizado.shp"
 "stores/work_jcp/Datasets/1/Test/Test_localizado.shp"
 
+"stores/work_jcp/Datasets/5/data_texto_test.rds"
+"stores/work_jcp/Datasets/5/data_texto_train.rds"
 
 
-
-
-# ================================================================
-#  Listado definitivo de variables en las bases ya pre-procesadas
-#  (Train_localizado y Test_localizado) – script para VS Code
-# ================================================================
-
-# 1.  Librerías ----------------------------------------------------
-pacman::p_load(sf, dplyr, readr, tibble, janitor)
-
-# 2.  Rutas a los shapefiles finales ------------------------------
-path_train <- "stores/work/Train/Train.shp"
-path_test  <- "stores/work/Test/Test.shp"
-
-# 3.  Lectura (silenciosa) y eliminación de la geometría ----------
-train_sf <- st_read(path_train, quiet = TRUE)
-test_sf  <- st_read(path_test , quiet = TRUE)
-
-train_tbl <- st_drop_geometry(train_sf)
-test_tbl  <- st_drop_geometry(test_sf)
-
-# 4.  Tabla con variable + tipo de dato ---------------------------
-var_train <- tibble(
-  variable = names(train_tbl),
-  tipo     = sapply(train_tbl, function(x) paste(class(x), collapse = "/"))
-)
-
-var_test <- tibble(
-  variable = names(test_tbl),
-  tipo     = sapply(test_tbl, function(x) paste(class(x), collapse = "/"))
-)
-
-# 5.  Limpieza de nombres (opcional) ------------------------------
-var_train <- var_train %>% clean_names()
-var_test  <- var_test  %>% clean_names()
-
-# 6.  Resultados en consola ---------------------------------------
-cat("\n► Variables en TRAIN (", nrow(var_train), "):\n", sep = "")
-print(var_train, n = Inf)
-
-cat("\n► Variables en TEST (",  nrow(var_test), "):\n", sep = "")
-print(var_test,  n = Inf)
-
-# 7.  Exportar a CSV (por si se requiere en LaTeX) -----------------
-dir.create("/stores/work_jcp/metadata", showWarnings = FALSE, recursive = TRUE)
-
-write_csv(var_train, "/stores/work_jcp/metadata/variables_train.csv")
-write_csv(var_test,  "/stores/work_jcp/metadata/variables_test.csv")
-
-
-
-
-
-
-
-# ================================================================
-#  Verificar que TRAIN.shp y TEST.shp contengan las mismas variables
-# ================================================================
-#  • Lee ambos shapefiles
-#  • Compara nombre y tipo de dato por columna
-#  • Reporta diferencias (si las hay)
-#  Uso: ejecutar en VS Code con la carpeta 'stores/work' ya creada
-# ================================================================
-
-pacman::p_load(sf, dplyr, purrr, tibble)
-
-# 1.  Rutas --------------------------------------------------------
-shp_train <- "stores/work/Train/Train.shp"
-shp_test  <- "stores/work/Test/Test.shp"
-
-# 2.  Lectura silenciosa y sin geometría --------------------------
-train <- st_read(shp_train, quiet = TRUE) %>% st_drop_geometry()
-test  <- st_read(shp_test, quiet = TRUE) %>% st_drop_geometry()
-
-# 3.  Conjuntos de nombres ---------------------------------------
-v_train <- names(train)
-v_test  <- names(test)
-
-# 4.  Diferencias de nombres -------------------------------------
-solo_en_train <- setdiff(v_train, v_test)
-solo_en_test  <- setdiff(v_test , v_train)
-comunes       <- intersect(v_train, v_test)
-
-cat("\n──────── Comparación de nombres ────────\n")
-cat("Total TRAIN:", length(v_train), " —  Total TEST:", length(v_test), "\n")
-
-if (length(solo_en_train) == 0 && length(solo_en_test) == 0) {
-  cat("✔ Las dos bases tienen exactamente las mismas columnas.\n")
-} else {
-  cat("⚠ Columnas SOLO en TRAIN (", length(solo_en_train), "):\n", sep = "")
-  print(solo_en_train, quote = FALSE)
-  cat("\n⚠ Columnas SOLO en TEST  (", length(solo_en_test), "):\n", sep = "")
-  print(solo_en_test , quote = FALSE)
-}
-
-# 5.  Concordancia de tipos para columnas comunes -----------------
-tipo_tbl <- tibble(
-  variable = comunes,
-  train_type = map_chr(comunes, ~ paste(class(train[[.x]]), collapse = "/")),
-  test_type  = map_chr(comunes, ~ paste(class(test [[.x]]), collapse = "/"))
-) %>%
-  mutate(iguales = train_type == test_type)
-
-cat("\n──────── Concordancia de tipos ────────\n")
-if (all(tipo_tbl$iguales)) {
-  cat("✔ Todos los tipos de dato coinciden entre TRAIN y TEST.\n")
-} else {
-  cat("⚠ Columnas con tipos distintos:\n")
-  print(filter(tipo_tbl, !iguales), n = Inf)
-}
-
-# 6.  Resultado lógico (útil en scripts) --------------------------
-mismos_nombres <- length(solo_en_train) == 0 && length(solo_en_test) == 0
-mismos_tipos   <- all(tipo_tbl$iguales)
-
-identico_esquema <- mismos_nombres && mismos_tipos
-cat("\n► Identidad completa de esquema:", identico_esquema, "\n")
-
-
-
-
-
-
-
-
-
-
-
+## SEGUNDA VERSIÓN
 
 #======================================================================
-#  Descriptivos detallados y resumen global de TRAIN.shp / TEST.shp
-#  ▸ genera:  CSV + imagen (.png) de cada tabla (para insertar en LaTeX)
-#  ▸ pensado para ejecutarse en VS Code (Windows/Mac/Linux)
+#  EDA • data_texto_train / data_texto_test
+#  ▸ genera resumen tabular (.csv  + .png)        ← tamaño ajustable
+#  ▸ genera gráfico de NAs  (.png)                ← tamaño ajustable
 #======================================================================
 
 # 0. Paquetes ----------------------------------------------------------
 if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
 pacman::p_load(
-  sf, dplyr, purrr, readr, tidyr,
-  skimr,                      # estadísticos descriptivos
-  gt, webshot2,               # tablas bonitas + exportar a PNG
-  janitor, stringr
+  dplyr, skimr, ggplot2, gt, webshot2, fs, readr, tidyr
 )
 
-# 1. Rutas a los shapefiles finales -----------------------------------
-shp_train <- "stores/work_jcp/Datasets/1/Train/Train_localizado.shp"
-shp_test  <- "stores/work_jcp/Datasets/1/Test/Test_localizado.shp"
+# 1. Configuración del usuario ----------------------------------------
+archivos <- list(
+  test  = "stores/work_jcp/Datasets/5/data_texto_test.rds",
+  train = "stores/work_jcp/Datasets/5/data_texto_train.rds"
+)
 
-# 2. Lectura (sin geometría) ------------------------------------------
-train <- st_read(shp_train, quiet = TRUE) %>% st_drop_geometry()
-test  <- st_read(shp_test , quiet = TRUE) %>% st_drop_geometry()
+# carpetas de salida
+out_dir  <- "stores/work_jcp/eda_texto"
+dir_create(out_dir, recurse = TRUE)
 
-# carpeta de salida
-out_dir <- "stores/work_jcp/metadata"
-dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+# parámetros para imágenes
+width_in   <- 8     # pulgadas para gráficos ggplot
+height_in  <- 5
+row_height <- 18    # px por fila en gt→png
+zoom_png   <- 2     # resolución
 
-#======================================================================
-#  (1)  Estadísticos descriptivos completos  --------------------------
-#======================================================================
-
-crear_desc <- function(df, nombre){
-  
-  # --- skimr: sin histograma spark, compacta ---
-  desc_tbl <- skimr::skim_without_charts(df) %>%
-    select(-starts_with("complete"))  # tabla más compacta
-  
-  # --- guardar CSV ---
-  write_csv(desc_tbl, file.path(out_dir, paste0("desc_localizado", nombre, ".csv")))
-  
-  # --- convertir a tabla gt y exportar PNG ---
-  desc_png <- file.path(out_dir, paste0("desc_localizado", nombre, ".png"))
-  desc_tbl %>%
-    gt::gt(rowname_col = "skim_variable") %>%
-    gt::tab_header(title = paste("Estadísticos descriptivos —", str_to_title(nombre))) %>%
-    gt::gtsave(desc_png)
-  
-  invisible(desc_tbl)
+#----------------------------------------------------------------------
+gtsave_png <- function(gt_tbl, file_png, n_rows,
+                       base_height = 100, row_height = 18,
+                       zoom = 2, expand = 5){
+  vheight <- base_height + n_rows * row_height
+  gt::gtsave(gt_tbl, filename = file_png,
+             vheight = vheight, zoom = zoom, expand = expand)
 }
 
-desc_train <- crear_desc(train, "train")
-desc_test  <- crear_desc(test , "test" )
-
-#======================================================================
-#  (2)  Resumen global de cada dataset  -------------------------------
-#======================================================================
-
-extraer_resumen <- function(df, nombre){
-  tibble(
-    dataset       = str_to_title(nombre),
-    n_observ      = nrow(df),
-    n_variables   = ncol(df),
-    perc_missing  = round(mean(is.na(df))*100, 2),
-    n_numeric     = sum(map_lgl(df, is.numeric)),
-    n_factor      = sum(map_lgl(df, is.factor)),
-    obj_size_MB   = format(object.size(df), units = "MB")
+procesar_rds <- function(path, nombre){
+  if (!file_exists(path)) {
+    cli::cli_alert_danger("Archivo {basename(path)} no encontrado.")
+    return(invisible(NULL))
+  }
+  
+  cli::cli_alert_info("Procesando {basename(path)} ...")
+  df <- readRDS(path)
+  
+  # ── 1. Resumen skimr (sin histograma spark) ────────────────────────
+  skim_tbl <- skim_without_charts(df)
+  
+  # CSV
+  csv_out <- path_file(path) |> path_ext_remove() |> paste0("_skim.csv")
+  write_csv(skim_tbl, file.path(out_dir, csv_out))
+  
+  # PNG
+  png_out <- path_file(path) |> path_ext_remove() |> paste0("_skim.png")
+  gt_tbl  <- gt(skim_tbl, rowname_col = "skim_variable") %>%
+    tab_header(title = paste("Descriptivos —", nombre)) %>%
+    opt_table_font(size = 9)
+  gtsave_png(gt_tbl,
+             file_png = file.path(out_dir, png_out),
+             n_rows   = nrow(skim_tbl),
+             row_height = row_height,
+             zoom = zoom_png)
+  
+  # ── 2. Conteo de NAs y gráfico ─────────────────────────────────────
+  nas_tbl <- tibble(variable = names(df),
+                    n_NA     = colSums(is.na(df))) %>%
+             arrange(desc(n_NA))
+  
+  # gráfico
+  gg <- ggplot(nas_tbl, aes(x = reorder(variable, n_NA), y = n_NA)) +
+    geom_col(fill = "#4682B4") +
+    coord_flip() +
+    labs(title = paste("Conteo de NA por variable —", nombre),
+         x = NULL, y = "# NAs") +
+    theme_minimal(base_size = 10)
+  
+  ggsave(
+    filename = file.path(out_dir,
+               paste0(path_file(path) |> path_ext_remove(), "_na.png")),
+    plot     = gg, width = width_in, height = height_in, dpi = 300
   )
+  
+  # CSV del NA count
+  write_csv(nas_tbl,
+            file.path(out_dir,
+                      paste0(path_file(path) |> path_ext_remove(), "_na.csv")))
+  
+  cli::cli_alert_success("Archivos para {nombre} generados en {out_dir}")
+  invisible(list(df = df, skim = skim_tbl, na = nas_tbl))
 }
 
-summary_tbl <- bind_rows(
-  extraer_resumen(train, "train"),
-  extraer_resumen(test , "test")
-)
+# 2. Ejecutar para cada RDS -------------------------------------------
+walk2(archivos, names(archivos), procesar_rds)
 
-# --- guardar CSV y PNG ---
-write_csv(summary_tbl, file.path(out_dir, "summary_datasets_localizado.csv"))
+cli::cli_rule(line = 2)
+cli::cli_alert_info("Todos los resultados se encuentran en: {out_dir}")
 
-summary_png <- file.path(out_dir, "summary_datasets_localizado.png")
-summary_tbl %>%
-  gt() %>%
-  gt::tab_header(title = "Resumen global de los conjuntos de datos") %>%
-  gt::fmt_number(columns = perc_missing, decimals = 2, suffixing = "%") %>%
-  gt::gtsave(summary_png)
 
-#======================================================================
-message("Tablas generadas en: ", normalizePath(out_dir))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## PRIMERA VERSIÓN
+
+
+# --- Cargar Paquetes Necesarios ---
+library(dplyr)
+library(skimr)
+library(openxlsx)
+library(ggplot2)
+library(gt)
+library(fs)     # Para manejo de archivos y directorios
+library(tidyr)  # Para pivot_wider, si es necesario con skimr output
+
+
+# --- Cargar y Analizar Archivos RDS ---
+
+ruta_test <- "stores/work_jcp/Datasets/5/data_texto_test.rds"
+ruta_train <- "stores/work_jcp/Datasets/5/data_texto_train.rds"
+
+# Cargar los conjuntos de datos
+# Es buena práctica usar tryCatch para manejar posibles errores al leer archivos
+ruta_test_completa <- NULL
+ruta_train_completa <- NULL
+
+tryCatch({
+  ruta_test_completa <- readRDS(ruta_test)
+  cat("Archivo 'data_texto_test.rds' cargado exitosamente.\n")
+}, error = function(e) {
+  cat("Error al cargar 'data_texto_test.rds':", conditionMessage(e), "\n")
+})
+
+tryCatch({
+  ruta_train_completa <- readRDS(ruta_train)
+  cat("Archivo 'data_texto_train.rds' cargado exitosamente.\n")
+}, error = function(e) {
+  cat("Error al cargar 'data_texto_train.rds':", conditionMessage(e), "\n")
+})
+
+
+# Otra forma de cargue
+
+# --- Configuración de Rutas y Directorios ---
+#ruta_base_datos <- "stores/work_jcp/Datasets/5"
+#archivo_test <- "data_texto_test.rds"
+#archivo_train <- "data_texto_train.rds"
+
+#ruta_test_completa <- file.path(ruta_base_datos, archivo_test)
+#ruta_train_completa <- file.path(ruta_base_datos, archivo_train)
+
+
+# --- Análisis Exploratorio del Conjunto de Test (data_texto_test.rds) ---
+################################################################################
+if (!is.null(ruta_test_completa)) {
+  cat("\n\n--- Análisis de: data_texto_test.rds ---\n")
+
+  # 1. Dimensiones del dataframe (filas, columnas)
+  cat("\n1. Dimensiones (filas, columnas):\n")
+  print(dim(ruta_test_completa))
+
+  # 2. Estructura del dataframe (tipos de datos de cada columna)
+  cat("\n2. Estructura (str):\n")
+  str(ruta_test_completa, list.len = ncol(ruta_test_completa)) # Muestra todas las columnas
+
+  # Alternativa más compacta con dplyr (si lo tienes instalado)
+  # if (require(dplyr)) {
+  #   cat("\n2b. Estructura (glimpse de dplyr):\n")
+  #   glimpse(ruta_test_completa)
+  # }
+
+  # 3. Primeras filas
+  cat("\n3. Primeras filas (head):\n")
+  print(head(ruta_test_completa))
+
+  # 4. Resumen estadístico básico
+  cat("\n4. Resumen estadístico (summary):\n")
+  print(summary(ruta_test_completa))
+
+  # 5. Nombres de las columnas
+  cat("\n5. Nombres de las columnas:\n")
+  print(names(ruta_test_completa))
+
+  # 6. Conteo de valores faltantes (NA) por columna
+  cat("\n6. Conteo de NAs por columna:\n")
+  sapply(ruta_test_completa, function(x) sum(is.na(x)))
+
+} else {
+  cat("\nNo se pudo cargar 'data_texto_test.rds' para el análisis.\n")
+}
+
+
+# --- Análisis Exploratorio del Conjunto de Train (data_texto_train.rds) ---
+################################################################################
+if (!is.null(ruta_train_completa)) {
+  cat("\n\n--- Análisis de: data_texto_train.rds ---\n")
+
+  # 1. Dimensiones del dataframe (filas, columnas)
+  cat("\n1. Dimensiones (filas, columnas):\n")
+  print(dim(ruta_train_completa))
+
+  # 2. Estructura del dataframe
+  cat("\n2. Estructura (str):\n")
+  str(ruta_train_completa, list.len = ncol(ruta_train_completa))
+
+  # Alternativa con dplyr
+  # if (require(dplyr)) {
+  #   cat("\n2b. Estructura (glimpse de dplyr):\n")
+  #   glimpse(ruta_train_completa)
+  # }
+
+  # 3. Primeras filas
+  cat("\n3. Primeras filas (head):\n")
+  print(head(ruta_train_completa))
+
+  # 4. Resumen estadístico básico
+  cat("\n4. Resumen estadístico (summary):\n")
+  print(summary(ruta_train_completa))
+
+  # 5. Nombres de las columnas
+  cat("\n5. Nombres de las columnas:\n")
+  print(names(ruta_train_completa))
+
+  # 6. Conteo de valores faltantes (NA) por columna
+  cat("\n6. Conteo de NAs por columna:\n")
+  sapply(ruta_train_completa, function(x) sum(is.na(x)))
+
+} else {
+  cat("\nNo se pudo cargar 'data_texto_train.rds' para el análisis.\n")
+}
+
+
+
+
+# Columnas diferentes entre train y test
+if (!is.null(ruta_train_completa) && !is.null(ruta_test_completa)) {
+  cat("\n\n--- Comparación de Columnas entre Train y Test ---\n")
+  cat("Columnas solo en Train:\n")
+  print(setdiff(names(ruta_train_completa), names(ruta_test_completa)))
+  cat("\nColumnas solo en Test:\n")
+  print(setdiff(names(ruta_test_completa), names(ruta_train_completa)))
+}
+
+
