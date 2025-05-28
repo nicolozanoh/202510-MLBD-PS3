@@ -53,13 +53,21 @@ train <- train %>% filter( loc_nmb != 'CHAPINERO')
 
 ## ---- Receta ----
 
+receta <- recipe(price ~ srf_ttl+surf_cv+rooms+bdrms+bathrm+prp_typ+PC1+PC2+
+                     PC3+PC4+PC5+PC6+PC7+PC8+PC9+PC10+PC11+PC12+PC13+PC14+PC15+
+                     PC16+PC17+PC18+PC19+PC20+PC21+PC22+PC23+PC24+PC25+PC26+
+                     PC27+PC28+PC29+PC30+nm_prqd+estrato+dist_nv+dst_hsp+
+                     dst_rst+dist_pl+dist_sc+dst_clt+dst_dsc+dst_prq+dst_ttr+dist_br+
+                     dst_plt+dst_stc+dst_gym+dst_jrd+dst_prk+dist_jg+dst_vpr+
+                     dst_vpd+dst_cyc+dst_mll+rati_cv+bdrm_pr, data = train) %>%
+  step_novel(all_nominal_predictors()) %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_interact(terms = ~ srf_ttl:matches("estrato")+dst_vpr:matches("estrato")) %>% 
+  step_poly(dst_vpr, degree = 2) %>%
+  step_zv(all_predictors()) %>% 
+  step_normalize(all_predictors())
 
-## ---- Obetenmos matrices ----
-
-
-
-## ---- Definimos el modelo ----
-
+receta2 <- prep(receta, training = train)
 
 ## ---- Cross Validation ----
 
@@ -70,6 +78,13 @@ location_folds_train <-
     train,
     group = loc_nmb
   )
+
+train <- bake(receta2, new_data = train)
+test <- bake(receta2, new_data = test)
+
+pred2 <- bake(receta2, new_data = pred, all_predictors())
+
+
 
 autoplot(location_folds_train)
 
@@ -88,13 +103,7 @@ grid <-  expand.grid(
   n.minobsinnode=c(5, 10))
 
 
-modelo <- train(price ~ srf_ttl+surf_cv+rooms+bdrms+bathrm+prp_typ+PC1+PC2+
-                  PC3+PC4+PC5+PC6+PC7+PC8+PC9+PC10+PC11+PC12+PC13+PC14+PC15+
-                  PC16+PC17+PC18+PC19+PC20+PC21+PC22+PC23+PC24+PC25+PC26+
-                  PC27+PC28+PC29+PC30+nm_prqd+estrato+dist_nv+dst_hsp+
-                  dst_rst+dist_pl+dist_sc+dst_clt+dst_dsc+dst_prq+dst_ttr+dist_br+
-                  dst_plt+dst_stc+dst_gym+dst_jrd+dst_prk+dist_jg+dst_vpr+
-                  dst_vpd+dst_cyc+dst_mll+rati_cv+bdrm_pr, 
+modelo <- train(price ~ ., 
                 data = train, 
                 method = "gbm",        
                 metric = "MAE",               
@@ -105,7 +114,7 @@ test$price_hat<-predict(modelo,newdata = test)
 
 mean(abs(test$price-test$price_hat))
 
-predic<-predict(modelo,newdata = pred)
+predic<-predict(modelo,newdata = pred2)
 
 results <- bind_cols(pred$prprty_, predic)
                   

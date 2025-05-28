@@ -104,4 +104,3 @@ colnames(results) <- c("property_id","price")
 
 write.csv(results, "stores\\sub\\XGBOOST.csv", row.names = FALSE)
 
-###########################################################################
