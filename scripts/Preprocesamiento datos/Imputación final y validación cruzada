@@ -174,4 +174,3 @@ sin_cod_man_TEST$cod_man  <- cod_man_imputado_Test
 # Combinar todo
 Train_localizado <- bind_rows(con_cod_man, sin_cod_man)
 Test_localizado <- bind_rows(con_cod_man_TEST, sin_cod_man_TEST)
-

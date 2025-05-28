@@ -1,0 +1,151 @@
+# Creacion de mapas de calor:
+
+bb <- st_bbox(Manzanas)  # bbox en CRS 3116
+
+HG_Amenities <- ggplot() +
+  geom_sf(data = Manzanas, fill = NA, color = "grey83", size = 0.3) +
+  stat_density_2d(
+    data = st_coordinates(amenities_centroides) %>% as.data.frame(),
+    aes(X, Y, fill = ..level..),
+    geom = "polygon", contour = TRUE, n = 100
+  ) +
+  scale_fill_gradientn(
+    colours = c("transparent", "#FFFFB2", "#FECC5C", "#FD8D3C", "#E31A1C", "#800026"),
+    values = scales::rescale(c(0, 0.2, 0.4, 0.6, 0.8, 1)),
+    guide = "colorbar"
+  ) +
+  coord_sf(xlim = c(bb["xmin"], bb["xmax"]), ylim = c(bb["ymin"], bb["ymax"])) +
+  theme_minimal() +
+  labs(
+    title = "Concentración amenidades en Bogotá",
+    x = "Easting",
+    y = "Northing",
+    fill = "Densidad"
+  )+
+  theme(
+    plot.title = element_text(size = 7))
+
+
+
+HG_2 <- ggplot() +
+  geom_sf(data = Manzanas, fill = NA, color = "grey", size = 0.3) +
+  stat_density_2d(
+    data = st_coordinates(public_transport_centroides) %>% as.data.frame(),
+    aes(X, Y, fill = ..level..),
+    geom = "polygon", contour = TRUE, n = 100
+  ) +
+  scale_fill_gradientn(
+    colours = c("transparent", "#FFFFB2", "#FECC5C", "#FD8D3C", "#E31A1C", "#800026"),
+    values = scales::rescale(c(0, 0.2, 0.4, 0.6, 0.8, 1)),
+    guide = "colorbar"
+  ) +
+  coord_sf(xlim = c(bb["xmin"], bb["xmax"]), ylim = c(bb["ymin"], bb["ymax"])) +
+  theme_minimal() +
+  labs(
+    title = "Concentración de estaciones y plataformas del transporte publico en Bogotá",
+    x = "Easting",
+    y = "Northing",
+    fill = "Densidad"
+  )+
+  theme(
+    plot.title = element_text(size = 7))
+
+HG_3 <- ggplot() +
+  geom_sf(data = Manzanas, fill = NA, color = "grey", size = 0.3) +
+  stat_density_2d(
+    data = st_coordinates(leisure_centroides) %>% as.data.frame(),
+    aes(X, Y, fill = ..level..),
+    geom = "polygon", contour = TRUE, n = 100
+  ) +
+  scale_fill_gradientn(
+    colours = c("transparent", "#FFFFB2", "#FECC5C", "#FD8D3C", "#E31A1C", "#800026"),
+    values = scales::rescale(c(0, 0.2, 0.4, 0.6, 0.8, 1)),
+    guide = "colorbar"
+  ) +
+  coord_sf(xlim = c(bb["xmin"], bb["xmax"]), ylim = c(bb["ymin"], bb["ymax"])) +
+  theme_minimal() +
+  labs(
+    title = "Concentración de lugares de ocio en Bogotá",
+    x = "Easting",
+    y = "Northing",
+    fill = "Densidad"
+  )+
+  theme(
+    plot.title = element_text(size = 7))
+
+HG_4 <- ggplot() +
+  geom_sf(data = Manzanas, fill = NA, color = "grey", size = 0.3) +
+  stat_density_2d(
+    data = st_coordinates(shop_centroides) %>% as.data.frame(),
+    aes(X, Y, fill = ..level..),
+    geom = "polygon", contour = TRUE, n = 100
+  ) +
+  scale_fill_gradientn(
+    colours = c("transparent", "#FFFFB2", "#FECC5C", "#FD8D3C", "#E31A1C", "#800026"),
+    values = scales::rescale(c(0, 0.2, 0.4, 0.6, 0.8, 1)),
+    guide = "colorbar"
+  ) +
+  coord_sf(xlim = c(bb["xmin"], bb["xmax"]), ylim = c(bb["ymin"], bb["ymax"])) +
+  theme_minimal() +
+  labs(
+    title = "Concentración de centros comerciales en Bogotá",
+    x = "Easting",
+    y = "Northing",
+    fill = "Densidad"
+  )+
+  theme(
+    plot.title = element_text(size = 7))
+
+HG_5 <- ggplot() +
+  geom_sf(data = Manzanas,color = "grey")+
+  geom_sf(data = primary, color = "blue", size = 0.4) +
+  geom_sf(data = pedestrian, color = "blue", size = 0.4) +
+  geom_sf(data = cycleway, color = "blue", size = 0.4) +
+  labs(title = "Vias principales y ciclorutas en Bogotá") +
+  theme_minimal()+
+  theme(
+    plot.title = element_text(size = 7))
+
+
+
+
+media_precio_por_man <- Train %>%
+  group_by(cod_man) %>%
+  summarise(media_price = mean(price, na.rm = TRUE))  # na.rm=TRUE para ignorar NA
+
+media_precio_por_man
+
+
+# Calcular centroides
+media_precio_por_man_centroides <- media_precio_por_man %>%
+  mutate(centroid = st_centroid(geometry))
+
+# Extraer coordenadas de los centroides
+coords <- st_coordinates(media_precio_por_man_centroides$centroid) %>% as.data.frame()
+
+# Agregar media_price a coords para usar en aes()
+coords$media_price <- media_precio_por_man_centroides$media_price
+
+# Plot
+HG_6 <- ggplot() +
+  geom_sf(data = Manzanas, fill = NA, color = "grey", size = 0.3) +
+  stat_density_2d(
+    data = coords,
+    aes(X, Y, fill = ..level..),
+    geom = "polygon", contour = TRUE, n = 100
+  ) +
+  scale_fill_gradientn(
+    colours = c("transparent", "#FFFFB2", "#FECC5C", "#FD8D3C", "#E31A1C", "#800026"),
+    values = scales::rescale(c(0, 0.2, 0.4, 0.6, 0.8, 1)),
+    guide = "colorbar"
+  ) +
+  coord_sf(xlim = c(bb["xmin"], bb["xmax"]), ylim = c(bb["ymin"], bb["ymax"])) +
+  theme_minimal() +
+  labs(
+    title = "Distribución Espacial de la Mediana del Precio de Viviendas en Venta por Manzana en Bogotá",
+    x = "Easting",
+    y = "Northing",
+    fill = "Densidad"
+  )+
+  theme(
+    plot.title = element_text(size = 7))

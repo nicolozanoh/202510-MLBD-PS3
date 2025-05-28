@@ -1,4 +1,4 @@
-# Taller 3 Preprocesamiento de datos:
+## Taller 3 Preprocesamiento de datos:
 
 # install and load required packages
 Packages <- c("tidyverse", 
@@ -752,4 +752,3 @@ st_write(Train_localizado, "C:\\Users\\samue\\OneDrive\\Escritorio\\Train.shp")
 
 #para el testing set:
 st_write(Test_localizado, "C:\\Users\\samue\\OneDrive\\Escritorio\\Test.shp")
-

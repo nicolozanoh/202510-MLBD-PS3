@@ -473,3 +473,4 @@ data_texto_test <- data_texto_completa %>% filter(is_test == 1)
 saveRDS(data_texto_train, file =  "data_texto_train.rds")
 saveRDS(data_texto_test,  file = "data_texto_test.rds"))
 
+
