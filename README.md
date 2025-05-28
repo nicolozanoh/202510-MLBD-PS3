@@ -14,7 +14,7 @@ clase de Machine learning y big data para economía aplicada.
   - Modelos: Contiene los modelos que fueron enviados a las submissions de Kaggle. 
 - stores: Aquí seguardan los datos.
   - datos espaciales: Se guardan las bases de datos que se utilizaron para el procesamiento de datos espaciales.
-  - provisionales: 
+  - provisionales: Se guardan diferentes códigos del procesamiento de datos en las bases. 
   - raw: En esta carpeta se deben dejar los datos "crudos". Debido al peso de los archivos no se pudieron dejar en el repositorio.
   - work: Aquí se guardan las bases de datos despues del pre-procesamiento.
   - sub: En esta carpeta quedan los archivos en formato para ser enviados a kaggle.
