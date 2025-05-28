@@ -13,6 +13,8 @@ clase de Machine learning y big data para economía aplicada.
   - En la carpeta "Preprocesamiento de datos" debe correrse primero el script "Datos texto.R" ya después se debe correr el script "Preprocesamiento de datos completos.R" donde se hace pre-procesamiento de los datos, se cargan los paquetes y se crean funciones que se utilizan en los modelos.
   - Modelos: Contiene los modelos que fueron enviados a las submissions de Kaggle. 
 - stores: Aquí seguardan los datos.
+  - datos espaciales: Se guardan las bases de datos que se utilizaron para el procesamiento de datos espaciales.
+  - provisionales: 
   - raw: En esta carpeta se deben dejar los datos "crudos". Debido al peso de los archivos no se pudieron dejar en el repositorio.
   - work: Aquí se guardan las bases de datos despues del pre-procesamiento.
   - sub: En esta carpeta quedan los archivos en formato para ser enviados a kaggle.
