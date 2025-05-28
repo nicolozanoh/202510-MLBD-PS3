@@ -72,7 +72,7 @@ receta_1 <- recipe(
   step_poly(dst_vpr, degree = 2) %>%
   step_zv(all_predictors()) %>%
   step_normalize(all_predictors()) %>%
-  # step_log(price, offset = 1) %>%   # linea para incluir log-transform
+  # step_log(price, offset = 1) %>%   # para incluir log-transform
   step_corr(all_numeric_predictors(), threshold = .9)
 
 
@@ -90,7 +90,7 @@ ctrl <- control_grid(
 )
 
 
-## ───────────────────── 4. XGBOOST (GPU) ───────────────────────────────
+## ───────────────────── 4. XGBOOST (con GPU) ───────────────────────────────
 xgb_spec <- boost_tree(
   trees = tune(), tree_depth = tune(), learn_rate = tune(),
   loss_reduction = tune(), mtry = tune(), sample_size = tune(),
@@ -107,7 +107,7 @@ xgb_wf   <- workflow() %>% add_recipe(receta_1) %>% add_model(xgb_spec)
 xgb_grid <- grid_space_filling(
   trees(), tree_depth(), learn_rate(), loss_reduction(),
   finalize(mtry(), train), sample_size = sample_prop(),
-  size = 5)
+  size = 30)
 
 xgb_res <- tune_grid(
   xgb_wf,
@@ -122,7 +122,7 @@ write_kaggle(bind_cols(test, predict(xgb_fit, test)), "pred_xgb.csv")
 
 
 
-## ───────────────────── 5. NNET (CPU, ligero) ──────────────────────────
+## ───────────────────── 5. NNET (con CPU, ligero) ──────────────────────────
 mlp_nnet_spec <- mlp(
   hidden_units = tune(), penalty = tune(), epochs = tune()
 ) %>%
@@ -234,7 +234,7 @@ param_keras <- update(
 )
 
 ## 2. Grid space-filling -----------------------------------------------
-grid_keras <- grid_space_filling(param_keras, size = 5)
+grid_keras <- grid_space_filling(param_keras, size = 30)
 
 ## 3. Ajuste -------------------------------------------------------------
 res_keras <- tune_grid(
@@ -284,7 +284,7 @@ write_kaggle(tibble(property_id = test$property_id, .pred = sl_pred),
              "pred_superlearner.csv")
 
 
-## ───────────────────── 9. COMPARAR MAE (validación) ──────────────────
+## ───────────────────── 9. COMPARACION INTERNA DE MAE´S (validación) ──────────────────
 grab_mae <- function(x) collect_metrics(x) %>%
   filter(.metric == "mae") %>% pull(mean)
 
@@ -297,4 +297,3 @@ mae_tbl <- tibble(
 print(mae_tbl)
 cat("SuperLearner MAE (CV interno):", round(sl_fit$cvRisk, 2), "\n")
 
-## ───────────────────── 10. FIN ───────────────────────────────────────
